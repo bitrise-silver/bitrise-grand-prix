@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
+<rect width="256" height="256" fill="#ed720c"/>
+<rect x="9" y="9" width="238" height="238" rx="26" fill="none" stroke="#ffffff" stroke-opacity="0.4" stroke-width="6"/>
+<g transform="translate(44 44) scale(7.0000)" fill="#ffffff"><path fill="#ffffff" fill-rule="evenodd" d="M5.797 5.22c3.754-.293 8.652-.293 12.406 0a2.934 2.934 0 0 1 2.643 2.376c.621 3.184.998 5.564 1.115 8.216a2.86 2.86 0 0 1-2.68 2.985c-4.107.27-10.455.27-14.563 0a2.86 2.86 0 0 1-2.679-2.985c.117-2.652.494-5.032 1.116-8.216A2.934 2.934 0 0 1 5.797 5.22M11.5 9v6.5h-2V9zm7 1.5v5h-2v-5zM8 10.5v5H6v-5zm7 2v3h-2v-3z" clip-rule="evenodd"></path></g>
+</svg>

@@ -1,0 +1,41 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="512" viewBox="0 0 256 512">
+<rect width="256" height="512" fill="#2b0e3f"/>
+<rect x="0" y="0" width="26" height="512" fill="#201b22"/>
+<path d="M0 -8 L26 -26 L26 -8 L0 10 Z" fill="#f9cc15"/>
+<path d="M0 28 L26 10 L26 28 L0 46 Z" fill="#f9cc15"/>
+<path d="M0 64 L26 46 L26 64 L0 82 Z" fill="#f9cc15"/>
+<path d="M0 100 L26 82 L26 100 L0 118 Z" fill="#f9cc15"/>
+<path d="M0 136 L26 118 L26 136 L0 154 Z" fill="#f9cc15"/>
+<path d="M0 172 L26 154 L26 172 L0 190 Z" fill="#f9cc15"/>
+<path d="M0 208 L26 190 L26 208 L0 226 Z" fill="#f9cc15"/>
+<path d="M0 244 L26 226 L26 244 L0 262 Z" fill="#f9cc15"/>
+<path d="M0 280 L26 262 L26 280 L0 298 Z" fill="#f9cc15"/>
+<path d="M0 316 L26 298 L26 316 L0 334 Z" fill="#f9cc15"/>
+<path d="M0 352 L26 334 L26 352 L0 370 Z" fill="#f9cc15"/>
+<path d="M0 388 L26 370 L26 388 L0 406 Z" fill="#f9cc15"/>
+<path d="M0 424 L26 406 L26 424 L0 442 Z" fill="#f9cc15"/>
+<path d="M0 460 L26 442 L26 460 L0 478 Z" fill="#f9cc15"/>
+<path d="M0 496 L26 478 L26 496 L0 514 Z" fill="#f9cc15"/>
+<rect x="230" y="0" width="26" height="512" fill="#201b22"/>
+<path d="M230 -8 L256 -26 L256 -8 L230 10 Z" fill="#f9cc15"/>
+<path d="M230 28 L256 10 L256 28 L230 46 Z" fill="#f9cc15"/>
+<path d="M230 64 L256 46 L256 64 L230 82 Z" fill="#f9cc15"/>
+<path d="M230 100 L256 82 L256 100 L230 118 Z" fill="#f9cc15"/>
+<path d="M230 136 L256 118 L256 136 L230 154 Z" fill="#f9cc15"/>
+<path d="M230 172 L256 154 L256 172 L230 190 Z" fill="#f9cc15"/>
+<path d="M230 208 L256 190 L256 208 L230 226 Z" fill="#f9cc15"/>
+<path d="M230 244 L256 226 L256 244 L230 262 Z" fill="#f9cc15"/>
+<path d="M230 280 L256 262 L256 280 L230 298 Z" fill="#f9cc15"/>
+<path d="M230 316 L256 298 L256 316 L230 334 Z" fill="#f9cc15"/>
+<path d="M230 352 L256 334 L256 352 L230 370 Z" fill="#f9cc15"/>
+<path d="M230 388 L256 370 L256 388 L230 406 Z" fill="#f9cc15"/>
+<path d="M230 424 L256 406 L256 424 L230 442 Z" fill="#f9cc15"/>
+<path d="M230 460 L256 442 L256 460 L230 478 Z" fill="#f9cc15"/>
+<path d="M230 496 L256 478 L256 496 L230 514 Z" fill="#f9cc15"/>
+<path d="M52 72 L128 28 L204 72 L204 102 L128 58 L52 102 Z" fill="#f9cc15"/>
+<path d="M52 162 L128 118 L204 162 L204 192 L128 148 L52 192 Z" fill="#f9cc15"/>
+<path d="M52 416 L128 372 L204 416 L204 446 L128 402 L52 446 Z" fill="#f9cc15"/>
+<path d="M52 496 L128 452 L204 496 L204 526 L128 482 L52 526 Z" fill="#f9cc15"/>
+<rect x="62" y="190" width="132" height="132" rx="18" fill="#2582d0"/>
+<g transform="translate(74 202) scale(4.5)" fill="#ffffff"><g fill="#ffffff"><path d="M18.5 3a2 2 0 0 1 2 2v7h-4v-2h2V5h-8v3h-2V5a2 2 0 0 1 2-2zM16.5 15H22v-2h-5.5zM2 21h15v-2H2z"></path><path fill-rule="evenodd" d="M13.5 9a2 2 0 0 1 2 2v7h-12v-7a2 2 0 0 1 2-2zm0 2v5h-8v-5z" clip-rule="evenodd"></path></g></g>
+</svg>

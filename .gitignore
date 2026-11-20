@@ -1,0 +1,16 @@
+node_modules/
+dist/
+*.log
+.DS_Store
+
+# Session data written by the server
+data/
+
+# Godot
+game/.godot/
+game/export/
+*.translation
+
+# Editor / local
+.env
+.claude/

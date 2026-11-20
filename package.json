@@ -1,0 +1,25 @@
+{
+  "name": "bitrise-grand-prix",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Phone-controlled RC car racing for conference booths and team events.",
+  "license": "MIT",
+  "type": "module",
+  "workspaces": [
+    "packages/*"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev": "npm run dev --workspace @bitrise-grand-prix/server & npm run dev --workspace @bitrise-grand-prix/controller",
+    "dev:server": "npm run dev --workspace @bitrise-grand-prix/server",
+    "dev:controller": "npm run dev --workspace @bitrise-grand-prix/controller",
+    "build": "npm run build --workspace @bitrise-grand-prix/controller && npm run build --workspace @bitrise-grand-prix/server",
+    "build:game": "./scripts/export-game.sh",
+    "start": "node packages/server/dist/server.js",
+    "test": "npm run test --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "lint": "npm run lint --workspaces --if-present"
+  }
+}
