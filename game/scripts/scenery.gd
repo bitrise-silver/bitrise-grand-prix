@@ -1,10 +1,13 @@
 extends Node3D
 ## Everything around the track that is only there to look at: mown grass, hills outside the
-## arena, trees, bushes and rocks (Kenney Nature Kit, CC0), a grandstand, team tents, Bitrise
-## flags, banners and billboards, and crowds that cheer when a car comes past.
+## arena, trees, bushes and rocks (Kenney Nature Kit, CC0), a grandstand with marquee lights,
+## team tents, Bitrise flags, banners and billboards, and crowds that cheer when a car comes past.
 ##
 ## The game camera looks north (towards -Z) from high up, so anything tall standing south of
 ## the road would hide it. Placement checks for that, see _blocks_view().
+
+## A crowd has just got excited about a car going past. `strength` 0 to 1: how close it came.
+signal cheered(strength: float)
 
 const Models := preload("res://scripts/models.gd")
 const Track := preload("res://scripts/track.gd")
@@ -15,6 +18,8 @@ const ICON_DIR := "res://assets/icons/"
 
 ## How far the hills reach beyond the arena.
 const HILL_MARGIN := 72.0
+## A crowd cheers out loud at most this often, in seconds.
+const CHEER_COOLDOWN := 4.0
 const TERRAIN_CELL := 4.0
 ## Ground hidden behind something of height h, seen from the game camera: about 0.73 h.
 const VIEW_SHADOW := 0.75
@@ -91,6 +96,10 @@ func update_focus(points: Array[Vector3], delta: float) -> void:
 		var target := clampf(1.0 - (nearest - float(crowd.radius)) / 30.0, 0.0, 1.0)
 		var value: float = crowd.excite
 		value = lerpf(value, target, 1.0 - exp(-3.0 * delta))
+		crowd.cooldown = maxf(0.0, float(crowd.cooldown) - delta)
+		if value > 0.55 and float(crowd.excite) <= 0.55 and crowd.cooldown <= 0.0:
+			crowd.cooldown = CHEER_COOLDOWN
+			cheered.emit(target)
 		if absf(value - float(crowd.excite)) > 0.01:
 			crowd.excite = value
 			(crowd.material as ShaderMaterial).set_shader_parameter("excite", value)
@@ -428,6 +437,33 @@ func _grandstand(center: Vector2, along: Vector2, normal: Vector2, width: float,
 
 	_add_crowd(seated, center, width * 0.5, stand)
 
+	# Marquee bulbs along the front of the canopy, chasing in Bitrise yellow and white.
+	var bulbs: Array[Transform3D] = []
+	var phases: Array[Color] = []
+	var bulb_count := int((width + 0.6) / 0.7)
+	for k in bulb_count + 1:
+		var x := -(width + 0.6) * 0.5 + k * 0.7
+		bulbs.append(Transform3D(Basis.IDENTITY, Vector3(x, 5.5, -depth * 0.5 + 2.83)))
+		phases.append(Track.bulb_color(COL_YELLOW if k % 2 == 0 else COL_WHITE, k * 0.9))
+	var bulb := SphereMesh.new()
+	bulb.radius = 0.13
+	bulb.height = 0.26
+	bulb.radial_segments = 8
+	bulb.rings = 4
+	var multimesh := MultiMesh.new()
+	multimesh.transform_format = MultiMesh.TRANSFORM_3D
+	multimesh.use_colors = true
+	multimesh.mesh = bulb
+	multimesh.instance_count = bulbs.size()
+	for i in bulbs.size():
+		multimesh.set_instance_transform(i, bulbs[i])
+		multimesh.set_instance_color(i, phases[i])
+	var lights := MultiMeshInstance3D.new()
+	lights.multimesh = multimesh
+	lights.material_override = Track.lights_material(0.45, 2.5, 2.4, 0.25)
+	lights.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	stand.add_child(lights)
+
 
 ## Pop-up team tents at both ends of the grandstand, with cones and a few people.
 func _build_tents(road_point: Vector2, along: Vector2, normal: Vector2, stand_width: float, front: float) -> void:
@@ -693,7 +729,7 @@ func _add_crowd(transforms: Array[Transform3D], center: Vector2, radius: float, 
 	instance.multimesh = multimesh
 	instance.material_override = material
 	parent.add_child(instance)
-	_crowds.append({"center": center, "radius": radius, "material": material, "excite": 0.0})
+	_crowds.append({"center": center, "radius": radius, "material": material, "excite": 0.0, "cooldown": 0.0})
 
 
 ## Spectators standing behind the barrier on the outside of the tightest bends.

@@ -9,8 +9,17 @@ three fast laps on their own phone. The big screen shows every car live in 3D.
 
 It looks like a toy racing circuit in Bitrise colours: small cars seen from high above,
 purple asphalt, Armco and tyre stacks, a grandstand full of fans, team tents, feather
-flags and trackside banners. Cars leave tyre marks and smoke in the corners and kick up dust
-on the grass.
+flags and trackside banners. Cars trail dust at speed, drift through the corners leaving
+tyre marks and smoke, kick up dirt on the grass, steer their front wheels and lean into the
+bends. Start lights on the finish gantry count you down, chase lights run along the gantry
+and the grandstand, marker lights flash round the bends and light studs pulse along the road
+edges. The fans bob, sway, do the odd Mexican wave, jump when a car flies past and take
+flash photos.
+
+Every boost, bug, checkpoint, lap, countdown beep, bump, landing and finish has a sound, as
+do the motor and the tyres; they are all made in code when the game loads, so there are no
+audio files. Players have sound on by default and the big screen has it off; the speaker
+button in the game switches it, and each remembers the choice.
 
 Built with [Godot 4](https://godotengine.org) (the game, exported to the web), Node and
 TypeScript (the session server) and React (the session controller site).
@@ -170,16 +179,17 @@ game/                    Godot project
   scripts/main.gd          entry point: player, spectator and practice modes; camera, intro
   scripts/car.gd           car physics
   scripts/car_visual.gd    the car model, painted in the driver's colour
-  scripts/car_fx.gd        tyre marks, smoke, dust, boost sparks
-  scripts/track.gd         builds the drivable track from a JSON file: road, kerbs, Armco
+  scripts/car_fx.gd        dust trail, drift marks, smoke, dirt, boost sparks
+  scripts/audio.gd         every sound effect, synthesised at load time
+  scripts/track.gd         builds the drivable track from a JSON file: road, kerbs, Armco, lights
   scripts/scenery.gd       grass, hills, trees, grandstand, tents, flags, crowds
   scripts/pickup.gd        boost and bug boxes
   scripts/models.gd        loads and recolours the Kenney models
   scripts/race.gd          countdown, laps, checkpoints, time limit
   scripts/ghosts.gd        other players' cars, interpolated
-  scripts/hud.gd           position, times, controls, LED countdown, panels
+  scripts/hud.gd           position, times, controls, LED countdown, panels, transitions
   scripts/net.gd           WebSocket client
-  shaders/                 grass, asphalt, car paint, crowds, flags
+  shaders/                 grass, asphalt, car paint, crowds, flags, blinking lights
   tracks/*.json            track definitions (also read by the server)
   assets/icons/            generated icon tiles
   assets/models/           Kenney Car Kit and Nature Kit models (CC0)
@@ -284,7 +294,9 @@ npm run typecheck
 
 ## Known gaps
 
-- No sound.
+- Sound has not been heard on real phones yet. Godot's browser build restarts a looped sound
+  at its original pitch, so `audio.gd` plays the motor and tyre squeal as overlapping
+  two-second sounds instead of loops; see the note at the top of that file.
 - Driver names are filtered for length and markup only; there is no profanity filter, so use
   "remove player" for names that should not be on a big screen.
 - The built-in font covers Latin text; names in other scripts may show as boxes in the game.

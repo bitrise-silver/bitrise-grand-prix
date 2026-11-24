@@ -14,7 +14,6 @@ import {
   IconPlus,
   useResponsive,
 } from '@bitrise/bitkit-v2';
-import { Box } from '@chakra-ui/react/box';
 import { VStack } from '@chakra-ui/react/stack';
 import { useCallback, useEffect, useState, type FormEvent, type SyntheticEvent } from 'react';
 import { useNavigate } from 'react-router';
@@ -27,6 +26,7 @@ import {
   type SessionSummary,
 } from '@bitrise-grand-prix/shared';
 import { api, ApiError, getAdminToken, setAdminToken } from '../api';
+import Page from '../components/Page';
 
 const CONTENT_WIDTH = 'layout/maxWidth/1280';
 
@@ -151,7 +151,7 @@ const SessionsPage = () => {
   const needsToken = Boolean(config?.authRequired) && !unlocked;
 
   return (
-    <Box as="main">
+    <Page>
       <BitkitPageHeader
         contentWidth={CONTENT_WIDTH}
         secondaryText="Phone-controlled RC car racing. Create a session, show its QR code, let people race."
@@ -300,7 +300,7 @@ const SessionsPage = () => {
           </BitkitNativeSelect>
         </VStack>
       </BitkitFormDialog>
-    </Box>
+    </Page>
   );
 };
 

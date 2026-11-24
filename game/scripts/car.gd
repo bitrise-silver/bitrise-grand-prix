@@ -7,6 +7,10 @@ extends RigidBody3D
 ## a phone while still being real physics where it is fun: ramps and walls.
 
 signal effect_applied(kind: String)
+## Hit something solid (Armco, a wall, the gantry). `strength` is the speed lost, in m/s.
+signal bumped(strength: float)
+## Back on the ground after a jump; `air_time` in seconds.
+signal landed(air_time: float)
 
 const CarVisual := preload("res://scripts/car_visual.gd")
 const CarFx := preload("res://scripts/car_fx.gd")
@@ -23,6 +27,10 @@ const GRASS_SPEED_FACTOR := 0.38
 const BOOST_FACTOR := 1.5         # +50 % for one second
 const SLOW_FACTOR := 0.5          # -50 % for one second
 const EFFECT_SECONDS := 1.0
+## How far the body swings out of line in a hard corner, like a drift, in radians.
+const DRIFT_ANGLE := 0.24
+## Losing this much speed in one physics tick, without braking for it, counts as a bump.
+const BUMP_SPEED := 4.5
 
 ## Driving direction in the XZ plane: forward is (cos(heading), 0, sin(heading)).
 var heading := 0.0
@@ -57,6 +65,11 @@ var _ray: RayCast3D
 var _shadow: MeshInstance3D
 var _fx: CarFx
 var _pitch := 0.0
+var _slip := 0.0
+## The ground velocity set last tick: a sudden drop against it means we hit something.
+var _last_planar := Vector2.ZERO
+var _bump := 0.0
+var _air_time := 0.0
 
 
 func _ready() -> void:
@@ -122,6 +135,9 @@ func reset_to(at: Vector3, new_heading: float) -> void:
 	effect = 0
 	_effect_left = 0.0
 	_kick = ""
+	_slip = 0.0
+	_bump = 0.0
+	_air_time = 0.0
 	if _fx:
 		_fx.clear_marks()
 
@@ -144,6 +160,7 @@ func _integrate_forces(state: PhysicsDirectBodyState3D) -> void:
 		state.transform = Transform3D(Basis.IDENTITY, _pending_reset.position)
 		state.linear_velocity = Vector3.ZERO
 		forward_speed = 0.0
+		_last_planar = Vector2.ZERO
 		_pending_reset = null
 		return
 
@@ -161,6 +178,10 @@ func _integrate_forces(state: PhysicsDirectBodyState3D) -> void:
 	var throttle := 0.0 if controls_locked else clampf(throttle_input, -1.0, 1.0)
 
 	var velocity := state.linear_velocity
+	var ground_speed := Vector2(velocity.x, velocity.z).length()
+	var lost := _last_planar.length() - ground_speed
+	if lost > BUMP_SPEED:
+		_bump = maxf(_bump, lost)
 	var fwd := forward()
 	var right := Vector3(-fwd.z, 0, fwd.x)
 	var speed := velocity.dot(fwd)
@@ -207,6 +228,7 @@ func _integrate_forces(state: PhysicsDirectBodyState3D) -> void:
 	var planar := fwd * speed + right * slide
 	state.linear_velocity = Vector3(planar.x, velocity.y, planar.z)
 	forward_speed = speed
+	_last_planar = Vector2(planar.x, planar.z)
 
 
 func _process(delta: float) -> void:
@@ -215,10 +237,20 @@ func _process(delta: float) -> void:
 	if absf(forward_speed) > 2.0:
 		target_pitch = clampf(atan2(linear_velocity.y, absf(forward_speed)), -0.6, 0.6)
 	_pitch = lerpf(_pitch, target_pitch, 1.0 - exp(-12.0 * delta))
-	_visual.rotation = Vector3(0, -heading, _pitch)
+	# Cornering hard on the road, the tail steps out: the body points further into the turn
+	# than the car is going. Purely for show; the physics stay grippy and predictable.
+	var corner := clampf(turn_rate * forward_speed / 55.0, -1.0, 1.0)
+	var target_slip := corner * DRIFT_ANGLE if grounded and on_road and forward_speed > 8.0 else 0.0
+	_slip = lerpf(_slip, target_slip, 1.0 - exp(-5.0 * delta))
+	_visual.rotation = Vector3(0, -(heading + _slip), _pitch)
 	_visual.call("set_steer", 0.0 if controls_locked else steer_input)
+	_visual.call("set_lean", corner if grounded else 0.0)
 	_visual.call("set_effect", effect)
 	_visual.call("set_wheel_speed", forward_speed)
+
+	if _bump > 0.0:
+		bumped.emit(_bump)
+		_bump = 0.0
 
 	var ground_y := 0.0
 	if _ray.is_colliding():
@@ -228,6 +260,19 @@ func _process(delta: float) -> void:
 	_shadow.global_rotation = Vector3(-PI * 0.5, -heading, 0)
 	_shadow.scale = Vector3.ONE * clampf(1.0 - height * 0.08, 0.45, 1.0)
 
+	if height > 0.3 or not grounded:
+		_air_time += delta
+	else:
+		if _air_time > 0.3:
+			landed.emit(_air_time)
+		_air_time = 0.0
+
 	var throttle := 0.0 if controls_locked else throttle_input
 	var contact := Vector3(global_position.x, ground_y, global_position.z)
-	_fx.feed(contact, heading, forward_speed, turn_rate, throttle, on_road, grounded and height < 0.3, effect, delta)
+	# Marks come off the wheels where they are drawn, so a drifting tail leaves a wider arc.
+	_fx.feed(contact, heading + _slip, forward_speed, turn_rate, throttle, on_road, grounded and height < 0.3, effect, delta)
+
+
+## 0 to 1: how loudly the tyres are squealing.
+func skid_level() -> float:
+	return _fx.skid_level if _fx else 0.0

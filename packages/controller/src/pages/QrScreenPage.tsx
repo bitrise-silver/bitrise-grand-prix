@@ -9,14 +9,15 @@ import {
   BitkitTextInput,
   IconFlag,
 } from '@bitrise/bitkit-v2';
-import { Box } from '@chakra-ui/react/box';
 import { Card } from '@chakra-ui/react/card';
 import { QrCode } from '@chakra-ui/react/qr-code';
 import { VStack } from '@chakra-ui/react/stack';
+import { Text } from '@chakra-ui/react/text';
 import { useEffect, useState, type SyntheticEvent } from 'react';
 import { useParams } from 'react-router';
-import { JOIN_CODE_ROTATE_MS, type ServerConfig } from '@bitrise-grand-prix/shared';
+import { JOIN_CODE_ROTATE_MS, RACE_LAPS, RUN_TIME_LIMIT_MS, type ServerConfig } from '@bitrise-grand-prix/shared';
 import { api, ApiError, getScreenKey, joinUrl, setScreenKey } from '../api';
+import Page from '../components/Page';
 import { useSession } from '../useSession';
 
 const CONTENT_WIDTH = 'layout/maxWidth/960';
@@ -179,7 +180,7 @@ const QrScreenPage = () => {
   const url = current && config ? joinUrl(config, code, current.token) : '';
 
   return (
-    <Box as="main">
+    <Page>
       <BitkitPageHeader
         breadcrumb={breadcrumb}
         contentWidth={CONTENT_WIDTH}
@@ -244,6 +245,10 @@ const QrScreenPage = () => {
                   value={(remaining / JOIN_CODE_ROTATE_MS) * 100}
                   width="full"
                 />
+                <Text color="text/secondary" textAlign="center" textStyle="body/md/regular">
+                  Point your phone's camera here, pick a driver name and race: {RACE_LAPS} laps, {RUN_TIME_LIMIT_MS / 1000}{' '}
+                  seconds.
+                </Text>
               </VStack>
             </Card.Body>
           </Card.Root>
@@ -257,7 +262,7 @@ const QrScreenPage = () => {
           />
         )}
       </BitkitContentWrapper>
-    </Box>
+    </Page>
   );
 };
 

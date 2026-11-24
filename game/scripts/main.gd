@@ -18,6 +18,7 @@ const Net := preload("res://scripts/net.gd")
 const Ghosts := preload("res://scripts/ghosts.gd")
 const Hud := preload("res://scripts/hud.gd")
 const Scenery := preload("res://scripts/scenery.gd")
+const Audio := preload("res://scripts/audio.gd")
 
 const DEFAULT_TRACK := "pipeline-park"
 const POSITION_INTERVAL := 0.1
@@ -29,6 +30,11 @@ const CAMERA_FOV := 34.0
 ## How far ahead of the car the camera looks, in seconds of travel.
 const CAMERA_LEAD := 0.45
 const INTRO_SECONDS := 4.2
+## In the last seconds of a run a tick sounds every second.
+const TICK_FROM_MS := 10_000
+const COL_BOOST := Color("#11bba9")
+const COL_BUG := Color("#f7596c")
+const COL_GOLD := Color("#f9cc15")
 
 var session_code := ""
 var spectating := false
@@ -44,6 +50,7 @@ var net: Net
 var ghosts: Ghosts
 var hud: Hud
 var scenery: Scenery
+var audio: Audio
 var camera: Camera3D
 var sun: DirectionalLight3D
 ## Phones get fewer trees, smaller shadows and no glow.
@@ -72,6 +79,17 @@ var _sim_lap_start := 0
 ## The fly-over before the first countdown: < 0 when not playing.
 var _intro_time := -1.0
 var _intro_done := false
+## True while the screen fades out to go back to the grid.
+var _starting := false
+## Camera shake left from a bump or a bug, 0 to 1; it dies away by itself.
+var _shake := 0.0
+## Seconds until the start lights go back to their idle sweep.
+var _lights_idle_in := -1.0
+var _last_tick_second := -1
+## The big screen remembers who leads, to make a fuss when that changes.
+var _leader := ""
+## When a crowd last cheered out loud, so neighbouring stands do not all roar at once.
+var _last_cheer_ms := -100_000
 
 
 func _ready() -> void:
@@ -89,6 +107,16 @@ func _ready() -> void:
 	add_child(hud)
 	hud.primary_pressed.connect(_on_primary_pressed)
 	hud.skip_requested.connect(_finish_intro)
+
+	# Sound starts on for players and off on the big screen, then remembers what was chosen.
+	audio = Audio.new()
+	add_child(audio)
+	audio.load_preference("spectator" if spectating else "player", not spectating)
+	hud.set_sound(audio.enabled)
+	hud.sound_toggled.connect(func(on: bool) -> void:
+		audio.set_enabled(on)
+		audio.play("click"))
+	hud.ui_clicked.connect(func() -> void: audio.play("click"))
 
 	ghosts = Ghosts.new()
 	ghosts.solid = spectating
@@ -236,7 +264,9 @@ func _build_world(track_id: String) -> void:
 	scenery.detail = 0.6 if low_end else 1.0
 	add_child(scenery)
 	scenery.build(track)
+	scenery.cheered.connect(_on_cheer)
 	ghosts.track = track
+	hud.reveal()
 
 	if spectating:
 		return
@@ -247,6 +277,8 @@ func _build_world(track_id: String) -> void:
 	add_child(car)
 	car.reset_to(track.spawn_position, track.spawn_heading)
 	car.effect_applied.connect(_on_effect)
+	car.bumped.connect(_on_bump)
+	car.landed.connect(_on_landed)
 	car.effects_enabled = true
 	_camera_target = track.spawn_position
 	_previous_position = track.spawn_position
@@ -257,10 +289,12 @@ func _build_world(track_id: String) -> void:
 	race.laps_total = _laps_total
 	race.time_limit_ms = _time_limit_ms
 	add_child(race)
-	race.countdown_tick.connect(func(seconds: int) -> void: hud.show_countdown(str(seconds)))
+	race.countdown_tick.connect(_on_countdown)
 	race.state_changed.connect(_on_race_state)
 	# The server times checkpoints itself from positions; report one the moment a gate is crossed.
-	race.checkpoint_passed.connect(func(_lap: int, _index: int, _ms: int) -> void: _send_position())
+	race.checkpoint_passed.connect(func(_lap: int, _index: int, _ms: int) -> void:
+		_send_position()
+		audio.play("checkpoint"))
 	race.lap_completed.connect(_on_lap)
 	race.finished.connect(_on_finished)
 
@@ -312,6 +346,25 @@ func _apply_session(session: Dictionary) -> void:
 	_session_open = str(session.get("status", "open")) == "open"
 	_leaderboard = session.get("leaderboard", [])
 	ghosts.set_players(session.get("players", []))
+	if spectating:
+		_check_leader()
+
+
+## On the big screen: a fanfare and a toast when someone takes the lead with a finished run.
+func _check_leader() -> void:
+	var top: Dictionary = _leaderboard[0] if not _leaderboard.is_empty() else {}
+	if not top.get("finished", false):
+		return
+	var leader := "%s/%d" % [str(top.get("playerId", "")), int(top.get("totalMs", 0))]
+	if leader == _leader:
+		return
+	var first := _leader.is_empty()
+	_leader = leader
+	if first:
+		return
+	hud.show_toast("NEW LEADER  %s  %s" % [str(top.get("name", "")), Hud.format_time(int(top.get("totalMs", 0)))], COL_GOLD, 2.6)
+	audio.play("finish")
+	audio.play("cheer", 3.0)
 
 
 func _on_connection_lost() -> void:
@@ -351,16 +404,28 @@ func _on_primary_pressed() -> void:
 
 
 func _start_run() -> void:
+	if _starting:
+		return
+	_starting = true
 	_last_run = {}
 	_result_delay = -1.0
+	hud.hide_panel()
+	# Back to the grid behind a quick fade, so the camera does not jump in plain sight.
+	hud.transition(_begin_run)
+
+
+func _begin_run() -> void:
+	_starting = false
 	_path_hint = -1
+	_last_tick_second = -1
+	_lights_idle_in = -1.0
+	track.set_start_lights("red", 0)
 	car.controls_locked = true
 	car.reset_to(track.spawn_position, track.spawn_heading)
 	_previous_position = track.spawn_position
 	_camera_target = track.spawn_position
 	_sim_ticks = 0
 	_sim_lap_start = 0
-	hud.hide_panel()
 	hud.reset_run(net != null)
 	if not _intro_done and not autopilot:
 		_start_intro()
@@ -405,12 +470,23 @@ func _update_intro(delta: float) -> void:
 		_finish_intro()
 
 
+## 3, 2, 1: a beep each, and the start lights come on two, four, then all five.
+func _on_countdown(seconds: int) -> void:
+	hud.show_countdown(str(seconds))
+	audio.play("beep")
+	track.set_start_lights("red", [5, 4, 2][clampi(seconds - 1, 0, 2)])
+
+
 func _on_race_state(state: int) -> void:
 	match state:
 		Race.State.RACING:
 			car.controls_locked = false
 			hud.sticks_enabled = true
 			hud.show_countdown("GO")
+			hud.flash(COL_BOOST, 0.22)
+			audio.play("go")
+			track.set_start_lights("green")
+			_lights_idle_in = 3.0
 			_send({"t": "run_start"})
 		Race.State.COUNTDOWN:
 			hud.sticks_enabled = true
@@ -424,8 +500,12 @@ func _on_lap(lap: int, lap_ms: int) -> void:
 		var rate := float(Engine.physics_ticks_per_second)
 		print("lap %d: %.2f s simulated" % [lap, (_sim_ticks - _sim_lap_start) / rate])
 		_sim_lap_start = _sim_ticks
-	if lap < _laps_total:
+	if lap == _laps_total - 1:
+		hud.show_toast("FINAL LAP   %s" % Hud.format_time(lap_ms), COL_GOLD, 1.4)
+		audio.play("final_lap")
+	elif lap < _laps_total:
 		hud.show_toast("LAP %d   %s" % [lap, Hud.format_time(lap_ms)], Color("#c289e6"), 1.2)
+		audio.play("lap")
 
 
 func _on_finished(completed: bool, total_ms: int) -> void:
@@ -434,15 +514,49 @@ func _on_finished(completed: bool, total_ms: int) -> void:
 	# Only says how the run ended; the server already has the laps and times.
 	_send({"t": "run_finish", "finished": completed})
 	hud.show_banner("FINISH!" if completed else "TIME'S UP!", Color("#11bba9") if completed else Color("#ff8091"), 1.2)
+	if completed:
+		audio.play("finish")
+		audio.play("cheer", 2.0)
+		track.set_start_lights("finish")
+	else:
+		audio.play("buzzer")
+		track.set_start_lights("red", 5)
+	_lights_idle_in = 4.0
 	_result_delay = 1.4
 	_autopilot_restart = 5.0
 
 
 func _on_effect(kind: String) -> void:
 	if kind == "boost":
-		hud.show_toast("CACHE HIT  +50%", Color("#11bba9"))
+		hud.show_toast("CACHE HIT  +50%", COL_BOOST)
+		hud.pulse_edges(COL_BOOST, 0.5)
+		audio.play("boost")
 	else:
-		hud.show_toast("BUG  -50%", Color("#f7596c"))
+		hud.show_toast("BUG  -50%", COL_BUG)
+		hud.pulse_edges(COL_BUG, 0.6)
+		audio.play("bug")
+		_shake = maxf(_shake, 0.55)
+
+
+## Bounced off the Armco or a wall: louder and shakier the harder it was.
+func _on_bump(strength: float) -> void:
+	var hardness := clampf(strength / 16.0, 0.25, 1.0)
+	audio.play("bump", linear_to_db(hardness), randf_range(0.9, 1.1))
+	_shake = maxf(_shake, hardness * 0.6)
+
+
+func _on_landed(air_time: float) -> void:
+	audio.play("land", linear_to_db(clampf(air_time, 0.4, 1.0)))
+	_shake = maxf(_shake, 0.3)
+
+
+## A crowd cheering a car going past, louder the closer it came.
+func _on_cheer(strength: float) -> void:
+	var now := Time.get_ticks_msec()
+	if now - _last_cheer_ms < 2500:
+		return
+	_last_cheer_ms = now
+	audio.play("cheer", linear_to_db(lerpf(0.35, 1.0, strength)), randf_range(0.92, 1.08))
 
 
 func _show_start_panel() -> void:
@@ -480,7 +594,8 @@ func _show_result_panel() -> void:
 			subtitle = "This run was not recorded (%s)." % str(server.get("reason", "unknown"))
 	var note := "Best lap %s" % Hud.format_time(race.best_lap_ms()) if race.best_lap_ms() > 0 else ""
 	var can_retry := not net or _session_open
-	hud.show_results(title, subtitle, "RACE AGAIN" if can_retry else "", note, _board_rows(), _own_board_row(), _session_name)
+	var count_to: int = int(_last_run.get("total_ms", 0)) if completed else -1
+	hud.show_results(title, subtitle, "RACE AGAIN" if can_retry else "", note, _board_rows(), _own_board_row(), _session_name, count_to)
 
 
 func _board_rows() -> Array:
@@ -552,6 +667,20 @@ func _process(delta: float) -> void:
 
 	var time_left: int = _time_limit_ms - race.elapsed_ms() if race.state == Race.State.RACING else -1
 	hud.set_race_readout(race.lap, _laps_total, race.elapsed_ms(), time_left, race.best_lap_ms())
+	if time_left >= 0 and time_left <= TICK_FROM_MS:
+		var second := int(ceil(time_left / 1000.0))
+		if second != _last_tick_second:
+			_last_tick_second = second
+			audio.play("tick")
+
+	var running := (race.state == Race.State.COUNTDOWN or race.state == Race.State.RACING) and _intro_time < 0.0
+	var throttle := 0.0 if car.controls_locked else car.throttle_input
+	audio.update_car(car.forward_speed, throttle, car.effect == 1, car.skid_level(), running, delta)
+
+	if _lights_idle_in > 0.0:
+		_lights_idle_in -= delta
+		if _lights_idle_in <= 0.0 and race.state != Race.State.COUNTDOWN:
+			track.set_start_lights("idle")
 
 	if race.state == Race.State.RACING:
 		_position_timer += delta
@@ -636,6 +765,10 @@ func _update_chase_camera(delta: float) -> void:
 	var eye := Vector3(0, sin(CAMERA_PITCH), cos(CAMERA_PITCH)) * CAMERA_DISTANCE
 	camera.global_position = _camera_target + eye
 	camera.look_at(_camera_target, Vector3.UP)
+	_shake = maxf(0.0, _shake - delta * 1.8)
+	var jolt := _shake * _shake * 0.8
+	camera.h_offset = randf_range(-jolt, jolt)
+	camera.v_offset = randf_range(-jolt, jolt)
 	# A little extra field of view sells the boost.
 	var target_fov := CAMERA_FOV + clampf((car.forward_speed - Car.MAX_SPEED) * 0.5, 0.0, 6.0)
 	camera.fov = lerpf(camera.fov, target_fov, 1.0 - exp(-6.0 * delta))

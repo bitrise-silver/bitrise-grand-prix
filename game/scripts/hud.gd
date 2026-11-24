@@ -6,9 +6,16 @@ extends CanvasLayer
 ## The project stretches the canvas so its short side is always 720 units, which keeps the
 ## controls the same physical size on every phone. The game is played in landscape; held
 ## upright, a phone shows a "turn your phone" card instead.
+##
+## Panels pop in and fade out, buttons squash when pressed, and a fade hides the camera
+## jumping back to the grid between runs.
 
 signal primary_pressed
 signal skip_requested
+## The speaker button was tapped.
+signal sound_toggled(on: bool)
+## Any other button was pressed; for the click sound.
+signal ui_clicked
 
 const COL_PANEL := Color(0.098, 0.035, 0.153, 0.80)
 const COL_ROW := Color(0.098, 0.035, 0.153, 0.66)
@@ -18,6 +25,7 @@ const COL_TEXT := Color("#f6f4f6")
 const COL_DIM := Color("#c9c1cd")
 const COL_WARN := Color("#ff8091")
 const COL_LED := Color("#f9cc15")
+const COL_FADE := Color("#1d0a2b")
 const MARGIN := 26.0
 ## The remaining time only appears once it is worth worrying about.
 const TIME_WARNING_MS := 15_000
@@ -41,6 +49,15 @@ var spectating := false
 
 var _font: FontVariation
 var _root: Control
+var _fade: ColorRect
+var _fade_tween: Tween
+var _flash: ColorRect
+var _vignette: TextureRect
+var _sound_button: SoundButton
+var _time := 0.0
+var _count_tween: Tween
+## Whether a panel is meant to be up; true from show until hide, whatever the animation is doing.
+var _panel_open := false
 var _left: VBoxContainer
 var _pos_number: Label
 var _pos_total: Label
@@ -119,7 +136,8 @@ class TouchStick extends Control:
 		draw_arc(knob, 44.0, 0.0, TAU, 48, Color(1, 1, 1, 0.9), 3.0, true)
 
 
-## A round pedal: accelerate (arrow up) or reverse (arrow down).
+## A round pedal: accelerate (arrow up) or reverse (arrow down). A ring ripples out from it
+## each time it is pressed.
 class PedalButton extends Control:
 	var radius := 88.0
 	var reverse := false
@@ -127,10 +145,18 @@ class PedalButton extends Control:
 		set(next):
 			if pressed != next:
 				pressed = next
+				if next:
+					_ripple = 0.0
 				queue_redraw()
+	var _ripple := 1.0
 
 	func _init() -> void:
 		mouse_filter = Control.MOUSE_FILTER_IGNORE
+
+	func _process(delta: float) -> void:
+		if _ripple < 1.0:
+			_ripple = minf(1.0, _ripple + delta / 0.35)
+			queue_redraw()
 
 	func setup(button_radius: float, is_reverse: bool) -> void:
 		radius = button_radius
@@ -149,6 +175,9 @@ class PedalButton extends Control:
 		if reverse:
 			fill = Color(1, 1, 1, 0.36 if pressed else 0.14)
 			arrow = Color(1, 1, 1, 0.9)
+		if _ripple < 1.0:
+			var eased := 1.0 - pow(1.0 - _ripple, 3.0)
+			draw_arc(c, radius * (1.0 + 0.4 * eased), 0.0, TAU, 64, Color(1, 1, 1, 0.55 * (1.0 - _ripple)), 5.0, true)
 		draw_circle(c, drawn, fill)
 		draw_arc(c, drawn, 0.0, TAU, 64, Color(1, 1, 1, 0.95 if pressed else 0.6), 4.0, true)
 		var direction := Vector2.DOWN if reverse else Vector2.UP
@@ -157,6 +186,45 @@ class PedalButton extends Control:
 		var base := c - direction * reach * 0.5
 		var side := Vector2(reach * 0.85, 0)
 		draw_colored_polygon(PackedVector2Array([tip, base + side, base - side]), arrow)
+
+
+## A round speaker button that turns the sound on and off.
+class SoundButton extends Control:
+	signal toggled_on(on: bool)
+	var on := true:
+		set(next):
+			on = next
+			queue_redraw()
+
+	func _init() -> void:
+		mouse_filter = Control.MOUSE_FILTER_STOP
+		custom_minimum_size = Vector2(64, 64)
+		size = custom_minimum_size
+
+	func _gui_input(event: InputEvent) -> void:
+		var click := event as InputEventMouseButton
+		if click and click.pressed and click.button_index == MOUSE_BUTTON_LEFT:
+			on = not on
+			toggled_on.emit(on)
+			accept_event()
+			pivot_offset = size * 0.5
+			scale = Vector2.ONE * 0.8
+			create_tween().tween_property(self, "scale", Vector2.ONE, 0.3).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+
+	func _draw() -> void:
+		var c := size * 0.5
+		var ink := Color(1, 1, 1, 0.92)
+		draw_circle(c, 30.0, Color(0.098, 0.035, 0.153, 0.66))
+		draw_arc(c, 30.0, 0.0, TAU, 48, Color(1, 1, 1, 0.35), 2.0, true)
+		draw_rect(Rect2(c + Vector2(-15, -6), Vector2(7, 12)), ink)
+		draw_colored_polygon(PackedVector2Array([c + Vector2(-8, -6), c + Vector2(1, -14), c + Vector2(1, 14), c + Vector2(-8, 6)]), ink)
+		if on:
+			draw_arc(c + Vector2(3, 0), 7.0, -0.9, 0.9, 12, ink, 3.0, true)
+			draw_arc(c + Vector2(3, 0), 13.0, -0.9, 0.9, 16, ink, 3.0, true)
+		else:
+			var cross := Color("#ff8091")
+			draw_line(c + Vector2(7, -7), c + Vector2(18, 4), cross, 3.5, true)
+			draw_line(c + Vector2(7, 4), c + Vector2(18, -7), cross, 3.5, true)
 
 
 ## A dot-matrix LED board for the countdown: 3, 2, 1, GO.
@@ -260,6 +328,7 @@ func _ready() -> void:
 	_root.theme = theme
 	add_child(_root)
 
+	_build_overlays()
 	_build_left()
 	_build_right()
 
@@ -268,8 +337,19 @@ func _ready() -> void:
 	_status_label.set_anchors_and_offsets_preset(Control.PRESET_CENTER_TOP)
 	_status_label.grow_horizontal = Control.GROW_DIRECTION_BOTH
 	_status_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_status_label.position.y = MARGIN
+	_status_label.position.y = MARGIN + 66.0
 	_root.add_child(_status_label)
+
+	# Sound on/off: top centre while driving (clear of both thumbs), top right on the big screen.
+	_sound_button = SoundButton.new()
+	if spectating:
+		_sound_button.set_anchors_and_offsets_preset(Control.PRESET_TOP_RIGHT)
+		_sound_button.position = Vector2(-MARGIN - _sound_button.size.x, MARGIN)
+	else:
+		_sound_button.set_anchors_and_offsets_preset(Control.PRESET_CENTER_TOP)
+		_sound_button.position = Vector2(-_sound_button.size.x * 0.5, MARGIN - 8.0)
+	_sound_button.toggled_on.connect(func(on: bool) -> void: sound_toggled.emit(on))
+	_root.add_child(_sound_button)
 
 	_banner = _label(110, COL_TEXT)
 	_banner.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -297,9 +377,17 @@ func _ready() -> void:
 		_status_label.visible = false
 
 
-func _process(_delta: float) -> void:
+func _process(delta: float) -> void:
+	_time += delta
 	if _portrait:
 		_portrait.visible = not spectating and _root.size.y > _root.size.x * 1.05
+	# Panels scale about their middle; their size is only known once laid out.
+	_panel.pivot_offset = _panel.size * 0.5
+	_results.pivot_offset = _results.size * 0.5
+	# The main button breathes gently while it waits to be pressed.
+	var glow := 1.0 + 0.12 * (0.5 + 0.5 * sin(_time * 4.0))
+	for button in [_panel_button, _results_button]:
+		(button as Button).modulate = Color(glow, glow, glow) if (button as Button).visible else Color.WHITE
 
 
 # --- building -----------------------------------------------------------------------------------
@@ -313,6 +401,42 @@ func _panel_style(color: Color, radius := 10, padding := Vector4(14, 6, 14, 6)) 
 	style.content_margin_right = padding.z
 	style.content_margin_bottom = padding.w
 	return style
+
+
+## Full-screen layers over the 3D view but under the rest of the HUD: the fade used for
+## transitions (opaque until the world is built), a flash, and a coloured vignette for boosts
+## and bugs.
+func _build_overlays() -> void:
+	_vignette = TextureRect.new()
+	var gradient := Gradient.new()
+	gradient.offsets = PackedFloat32Array([0.0, 0.55, 1.0])
+	gradient.colors = PackedColorArray([Color(1, 1, 1, 0), Color(1, 1, 1, 0), Color(1, 1, 1, 1)])
+	var texture := GradientTexture2D.new()
+	texture.gradient = gradient
+	texture.fill = GradientTexture2D.FILL_RADIAL
+	texture.fill_from = Vector2(0.5, 0.5)
+	texture.fill_to = Vector2(1.05, 0.5)
+	texture.width = 128
+	texture.height = 128
+	_vignette.texture = texture
+	_vignette.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	_vignette.stretch_mode = TextureRect.STRETCH_SCALE
+	_vignette.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_vignette.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_vignette.modulate = Color(1, 1, 1, 0)
+	_root.add_child(_vignette)
+
+	_flash = ColorRect.new()
+	_flash.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_flash.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_flash.color = Color(1, 1, 1, 0)
+	_root.add_child(_flash)
+
+	_fade = ColorRect.new()
+	_fade.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_fade.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_fade.color = COL_FADE
+	_root.add_child(_fade)
 
 
 ## Position, standings tower and the gap to the car ahead, top left.
@@ -492,11 +616,24 @@ func _button(text_size: int) -> Button:
 	button.add_theme_font_size_override("font_size", text_size)
 	for color_name: String in ["font_color", "font_hover_color", "font_pressed_color", "font_focus_color"]:
 		button.add_theme_color_override(color_name, COL_ON_ACCENT)
-	for state_name: String in ["normal", "hover", "pressed", "focus"]:
-		var style := _panel_style(COL_ACCENT if state_name != "pressed" else COL_ACCENT.darkened(0.2), 14, Vector4(24, 8, 24, 8))
+	var fills := {"normal": COL_ACCENT, "hover": COL_ACCENT.lightened(0.12), "pressed": COL_ACCENT.darkened(0.2), "focus": COL_ACCENT}
+	for state_name: String in fills:
+		var style := _panel_style(fills[state_name], 14, Vector4(24, 8, 24, 8))
 		button.add_theme_stylebox_override(state_name, style)
-	button.pressed.connect(func() -> void: primary_pressed.emit())
+	button.button_down.connect(func() -> void: _squash(button, 0.93))
+	button.button_up.connect(func() -> void: _squash(button, 1.0))
+	button.pressed.connect(func() -> void:
+		ui_clicked.emit()
+		primary_pressed.emit())
 	return button
+
+
+## Springs a button to `amount` of its size: in when pressed, back out when let go.
+func _squash(button: Control, amount: float) -> void:
+	button.pivot_offset = button.size * 0.5
+	var tween := button.create_tween()
+	tween.tween_property(button, "scale", Vector2.ONE * amount, 0.08 if amount < 1.0 else 0.3) \
+		.set_trans(Tween.TRANS_QUAD if amount < 1.0 else Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 
 
 ## The small panel for start, practice and connection messages.
@@ -671,6 +808,47 @@ func set_status(text: String) -> void:
 	_status_label.text = text
 
 
+func set_sound(on: bool) -> void:
+	_sound_button.on = on
+
+
+## Fades in from the start-up colour once there is a world to show.
+func reveal() -> void:
+	if _fade_tween and _fade_tween.is_running():
+		return
+	_fade_tween = create_tween()
+	_fade_tween.tween_property(_fade, "modulate:a", 0.0, 0.6).set_ease(Tween.EASE_OUT)
+	_fade_tween.tween_callback(func() -> void: _fade.visible = false)
+
+
+## Fades the 3D view out, calls `mid` while nothing can be seen, then fades back in. Hides the
+## camera jumping, such as going back to the grid for another run.
+func transition(mid: Callable) -> void:
+	if _fade_tween:
+		_fade_tween.kill()
+	_fade.visible = true
+	_fade_tween = create_tween()
+	_fade_tween.tween_property(_fade, "modulate:a", 1.0, 0.22).set_ease(Tween.EASE_IN)
+	_fade_tween.tween_callback(mid)
+	_fade_tween.tween_interval(0.08)
+	_fade_tween.tween_property(_fade, "modulate:a", 0.0, 0.4).set_ease(Tween.EASE_OUT)
+	_fade_tween.tween_callback(func() -> void: _fade.visible = false)
+
+
+## A quick full-screen flash, for GO.
+func flash(color: Color, strength := 0.25) -> void:
+	_flash.color = Color(color.r, color.g, color.b, strength)
+	create_tween().tween_property(_flash, "color:a", 0.0, 0.35).set_ease(Tween.EASE_OUT)
+
+
+## The screen's edges glow in `color` for a moment: teal for a boost, red for a bug.
+func pulse_edges(color: Color, strength := 0.6) -> void:
+	_vignette.modulate = Color(color.r, color.g, color.b, strength)
+	var tween := create_tween()
+	tween.tween_interval(0.12)
+	tween.tween_property(_vignette, "modulate:a", 0.0, 0.55).set_ease(Tween.EASE_IN)
+
+
 func set_track_title(track_name: String, laps: int) -> void:
 	_intro_title.text = track_name.to_upper()
 	_intro_laps.text = "%d LAPS" % laps
@@ -826,7 +1004,8 @@ func show_toast(text: String, color := COL_ACCENT, seconds := 0.8) -> void:
 ## The small centred panel: start, practice, connection trouble. `rows` and `highlight` are
 ## accepted for compatibility and ignored; standings go through show_results().
 func show_panel(title: String, subtitle: String, button_text: String, note := "", _rows: Array = [], _highlight := -1) -> void:
-	_results.visible = false
+	_close(_results)
+	_panel_open = true
 	_panel_title.text = title
 	_panel_subtitle.text = subtitle
 	_panel_subtitle.visible = not subtitle.is_empty()
@@ -834,15 +1013,26 @@ func show_panel(title: String, subtitle: String, button_text: String, note := ""
 	_panel_note.visible = not note.is_empty()
 	_panel_button.text = button_text
 	_panel_button.visible = not button_text.is_empty()
-	_panel.visible = true
+	_open(_panel)
 
 
 ## The results table. Each row is [position, name, best lap, total, colour]; `highlight` is
-## the player's own row.
-func show_results(title: String, subtitle: String, button_text: String, note: String, rows: Array, highlight: int, session_name: String) -> void:
-	_panel.visible = false
+## the player's own row. When the table first opens with `count_to_ms` given, the big time
+## counts up to it.
+func show_results(title: String, subtitle: String, button_text: String, note: String, rows: Array, highlight: int,
+		session_name: String, count_to_ms := -1) -> void:
+	_close(_panel)
+	var opening := not _results.visible or _results.modulate.a < 0.5
+	_panel_open = true
 	_results_session.text = session_name
+	if _count_tween:
+		_count_tween.kill()
 	_results_time.text = title
+	if opening and count_to_ms > 0:
+		_count_tween = create_tween()
+		_count_tween.tween_method(func(ms: float) -> void: _results_time.text = format_time(int(ms)), 0.0, float(count_to_ms), 0.8) \
+			.set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+		_count_tween.tween_callback(func() -> void: _results_time.text = title)
 	_results_subtitle.text = subtitle
 	_results_subtitle.visible = not subtitle.is_empty()
 	_results_note.text = note
@@ -855,19 +1045,53 @@ func show_results(title: String, subtitle: String, button_text: String, note: St
 		var bar := Color(str(cells[4])) if cells.size() > 4 else COL_ACCENT
 		var row := _table_row([cells[0], "", cells[1], cells[2], cells[3]], COL_ACCENT if own else COL_ROW, COL_ON_ACCENT if own else COL_TEXT, 26, bar)
 		_results_rows.add_child(row)
+		if opening:
+			# Rows come in one after another, top first.
+			row.modulate.a = 0.0
+			var tween := row.create_tween()
+			tween.tween_interval(0.18 + i * 0.07)
+			tween.tween_property(row, "modulate:a", 1.0, 0.2)
 	_results_rows.visible = not rows.is_empty()
 	_results_button.text = button_text
 	_results_button.visible = not button_text.is_empty()
-	_results.visible = true
+	_open(_results)
 
 
 func hide_panel() -> void:
-	_panel.visible = false
-	_results.visible = false
+	_panel_open = false
+	_close(_panel)
+	_close(_results)
 
 
 func is_panel_visible() -> bool:
-	return _panel.visible or _results.visible
+	return _panel_open
+
+
+## Pops a panel in: fades up and springs from a little smaller.
+func _open(control: Control) -> void:
+	if control.has_meta("tween"):
+		(control.get_meta("tween") as Tween).kill()
+	if not control.visible or control.modulate.a < 0.05:
+		control.modulate.a = 0.0
+		control.scale = Vector2.ONE * 0.9
+	control.visible = true
+	var tween := create_tween().set_parallel(true)
+	tween.tween_property(control, "modulate:a", 1.0, 0.2)
+	tween.tween_property(control, "scale", Vector2.ONE, 0.34).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	control.set_meta("tween", tween)
+
+
+## Fades a panel out and shrinks it a touch, then hides it.
+func _close(control: Control) -> void:
+	if not control.visible:
+		return
+	if control.has_meta("tween"):
+		(control.get_meta("tween") as Tween).kill()
+	var tween := create_tween().set_parallel(true)
+	tween.tween_property(control, "modulate:a", 0.0, 0.16)
+	tween.tween_property(control, "scale", Vector2.ONE * 0.95, 0.16)
+	tween.chain().tween_callback(func() -> void: control.visible = false)
+	control.set_meta("tween", tween)
 
 
 static func format_time(ms: int) -> String:
@@ -892,6 +1116,8 @@ func _input(event: InputEvent) -> void:
 	if event is InputEventScreenTouch:
 		var touch: InputEventScreenTouch = event
 		if touch.pressed:
+			if _sound_button.get_global_rect().has_point(touch.position):
+				return
 			var pedal := _pedal_at(touch.position)
 			if not pedal.is_empty():
 				_pedal_touches[touch.index] = pedal

@@ -10,6 +10,11 @@ const Track := preload("res://scripts/track.gd")
 ## The model is 2.9 units long; this makes it the length the car's physics expect.
 const MODEL_SCALE := 0.8
 const WHEEL_RADIUS := 0.3 * MODEL_SCALE
+## How far the front wheels turn at full lock, in radians. More than a real car, so it reads
+## from the high camera.
+const STEER_ANGLE := 0.62
+## How far the body leans out of a hard corner, in radians.
+const LEAN_ANGLE := 0.09
 
 var color := Color("#9247c2")
 var ghost := false
@@ -17,12 +22,16 @@ var display_name := ""
 
 var _front_wheels: Array[Node3D] = []
 var _wheels: Array[Node3D] = []
+var _body: Node3D
 var _antenna: Node3D
 var _label: Label3D
 var _glow: MeshInstance3D
 var _time := 0.0
 var _spin := 0.0
 var _steer := 0.0
+var _steer_shown := 0.0
+var _lean := 0.0
+var _lean_shown := 0.0
 var _wheel_speed := 0.0
 
 
@@ -39,6 +48,7 @@ func _ready() -> void:
 			_wheels.append(wheel)
 			if wheel_name.begins_with("wheel-front"):
 				_front_wheels.append(wheel)
+	_body = model.find_child("body", true, false) as Node3D
 
 	# Every RC car needs a wobbly antenna.
 	_antenna = Node3D.new()
@@ -105,14 +115,25 @@ func _process(delta: float) -> void:
 	_time += delta
 	_antenna.rotation.z = sin(_time * 9.0) * 0.07 + clampf(_wheel_speed * 0.012, -0.25, 0.25)
 	_spin = wrapf(_spin + _wheel_speed / WHEEL_RADIUS * delta, -PI, PI)
+	# Eased, so the wheels swing over rather than snap, like a steering servo.
+	_steer_shown = lerpf(_steer_shown, _steer, 1.0 - exp(-14.0 * delta))
 	for wheel in _wheels:
-		var steer := -_steer * 0.45 if _front_wheels.has(wheel) else 0.0
+		var steer := -_steer_shown * STEER_ANGLE if _front_wheels.has(wheel) else 0.0
 		wheel.rotation = Vector3(_spin, steer, 0.0)
+	# The body rolls towards the outside of the corner; the wheels stay on the ground.
+	_lean_shown = lerpf(_lean_shown, _lean, 1.0 - exp(-7.0 * delta))
+	if _body:
+		_body.rotation.z = -_lean_shown * LEAN_ANGLE
 
 
 ## steer: -1 (left) to 1 (right).
 func set_steer(steer: float) -> void:
 	_steer = steer
+
+
+## How hard the car is cornering: -1 (hard left) to 1 (hard right). Leans the body.
+func set_lean(lean: float) -> void:
+	_lean = clampf(lean, -1.0, 1.0)
 
 
 ## Forward speed in units per second; spins the wheels.

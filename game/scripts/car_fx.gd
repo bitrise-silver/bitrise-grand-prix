@@ -1,10 +1,13 @@
 extends Node3D
-## What a car leaves behind: tyre marks and smoke when it corners hard, brakes or spins its
-## wheels on the road, dust and ruts on grass and sand, a dust cloud when it lands a jump, and
-## cyan sparks while boosted. Fed once a frame by whoever moves the car; lives in world space.
+## What a car leaves behind: a light dust trail at speed, drift marks and smoke when it
+## corners hard, brakes or spins its wheels on the road, thick dust and ruts on grass and sand,
+## a dust cloud when it lands a jump, and cyan sparks while boosted. Fed once a frame by
+## whoever moves the car; lives in world space.
 
-## How hard a corner has to be (speed x turn rate, in m/s²) before the tyres start to complain.
-const SKID_LATERAL := 30.0
+## How hard a corner has to be (speed x turn rate, in m/s²) before the tyres start to drift.
+const SKID_LATERAL := 22.0
+## Above this speed on the road the car trails a little dust.
+const TRAIL_SPEED := 9.0
 const MARK_COUNT := 1400
 const MARK_STEP := 0.35
 const MARK_Y := 0.09
@@ -13,12 +16,15 @@ const TRACK_HALF := 0.4
 
 ## Skid marks, smoke and dust can be turned off where frame rate matters more.
 var marks_enabled := true
+## 0 to 1: how loudly the tyres are squealing right now. Read by the sound effects.
+var skid_level := 0.0
 
 var _marks: MultiMesh
 var _mark_next := 0
 var _last_mark: Array = [null, null]
 var _smoke: CPUParticles3D
 var _dust: CPUParticles3D
+var _trail: CPUParticles3D
 var _sparks: CPUParticles3D
 var _burst: CPUParticles3D
 var _air_time := 0.0
@@ -47,7 +53,9 @@ func _ready() -> void:
 	add_child(marks_instance)
 
 	_smoke = _puffs(Color(0.93, 0.92, 0.96, 0.5), 40, 1.1, Vector2(0.7, 2.6), 1.2)
-	_dust = _puffs(Color(0.78, 0.64, 0.45, 0.55), 36, 0.8, Vector2(0.8, 2.4), 0.4)
+	_dust = _puffs(Color(0.78, 0.64, 0.45, 0.62), 44, 1.0, Vector2(0.9, 2.9), 0.5)
+	# Pale and thin: asphalt dust, just enough to show the car is moving fast.
+	_trail = _puffs(Color(0.88, 0.84, 0.93, 0.26), 30, 0.85, Vector2(0.5, 2.1), 0.35)
 	_sparks = _puffs(Color(0.25, 1.0, 0.9, 0.9), 30, 0.35, Vector2(0.35, 0.05), 0.0)
 	_burst = _puffs(Color(0.78, 0.64, 0.45, 0.6), 26, 0.9, Vector2(1.0, 3.2), 0.3)
 	_burst.one_shot = true
@@ -85,8 +93,17 @@ func feed(contact: Vector3, heading: float, speed: float, turn_rate: float, thro
 	var skidding := grounded and on_road and moving and (lateral > SKID_LATERAL or braking or launching)
 	var rutting := grounded and not on_road and absf(speed) > 3.0
 
+	var trailing := grounded and on_road and absf(speed) > TRAIL_SPEED and not skidding
+	# Thicker the faster the car goes.
+	_trail.color.a = clampf((absf(speed) - TRAIL_SPEED) / 16.0, 0.35, 1.0)
 	_place(_smoke, rear, heading, skidding and marks_enabled)
 	_place(_dust, rear, heading, rutting and marks_enabled)
+	_place(_trail, rear + Vector3(0, 0.05, 0), heading, trailing and marks_enabled)
+
+	if skidding:
+		skid_level = clampf(0.3 + (lateral - SKID_LATERAL) / 35.0, 0.3, 1.0) if lateral > SKID_LATERAL else 0.55
+	else:
+		skid_level = 0.0
 	_place(_sparks, rear + Vector3(0, 0.3, 0), heading, effect == 1 and moving)
 
 	if not marks_enabled:
@@ -94,7 +111,7 @@ func feed(contact: Vector3, heading: float, speed: float, turn_rate: float, thro
 	var leaving := skidding or rutting
 	var strength := 0.5
 	if skidding:
-		strength = clampf(0.35 + (lateral - SKID_LATERAL) / 40.0, 0.35, 0.75) if lateral > SKID_LATERAL else 0.45
+		strength = clampf(0.4 + (lateral - SKID_LATERAL) / 35.0, 0.4, 0.8) if lateral > SKID_LATERAL else 0.45
 	var tint := Color(0.08, 0.06, 0.1, strength) if skidding else Color(0.33, 0.24, 0.14, 0.4)
 	for side in 2:
 		var wheel := rear + right * (TRACK_HALF if side == 0 else -TRACK_HALF)

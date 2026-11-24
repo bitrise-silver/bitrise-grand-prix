@@ -1,11 +1,13 @@
 extends Node3D
 ## Builds the drivable part of a track from a JSON file in res://tracks: road, kerbs, sand
-## traps, Armco barriers, the start/finish line, ramps, walls and pickups. Scenery (grass,
-## trees, crowds, flags) is scenery.gd's job. Also answers "is this point on the road?" and
-## holds the gates used for lap counting.
+## traps, Armco barriers, the start/finish line, ramps, walls and pickups, and the lights on
+## them (start lights, chase lights, bend markers, road studs). Scenery (grass, trees, crowds,
+## flags) is scenery.gd's job. Also answers "is this point on the road?" and holds the gates
+## used for lap counting.
 
 const Pickup := preload("res://scripts/pickup.gd")
 const ROAD_SHADER := preload("res://shaders/road.gdshader")
+const LIGHTS_SHADER := preload("res://shaders/lights.gdshader")
 
 const SAMPLES_PER_SEGMENT := 12
 const ICON_DIR := "res://assets/icons/"
@@ -30,6 +32,14 @@ const COL_BEAM := Color("#2b0e3f")
 const COL_CONCRETE := Color("#cfc9d6")
 const COL_HAZARD := Color("#f9cc15")
 const COL_DARK := Color("#201b22")
+const COL_LAMP_OFF := Color(0.16, 0.13, 0.19)
+const COL_LAMP_RED := Color(1.0, 0.12, 0.14)
+const COL_LAMP_GREEN := Color(0.1, 1.0, 0.5)
+const COL_LAMP_AMBER := Color(1.0, 0.62, 0.08)
+const START_LAMPS := 5
+## Road studs: one every this many centreline samples, and how far a pulse travels per cycle.
+const STUD_EVERY := 3
+const STUD_WAVE := 26.0
 
 var data: Dictionary = {}
 var track_id := ""
@@ -56,6 +66,8 @@ var barriers: Array[Dictionary] = []
 var _control: Array[Vector2] = []
 var _shortcuts: Array[Dictionary] = []
 var _spinners: Array[Node3D] = []
+var _start_lamps: MultiMesh
+var _start_material: ShaderMaterial
 ## Small solid parts (gantry, wall blocks, rails) merged into one mesh: one draw call, not dozens.
 var _static: SurfaceTool
 
@@ -97,6 +109,7 @@ func build(id: String) -> bool:
 	for wall: Dictionary in data.get("walls", []):
 		_build_wall(wall)
 	_build_barriers()
+	_build_road_studs()
 	var solid := _flat_material()
 	solid.cull_mode = BaseMaterial3D.CULL_BACK
 	solid.roughness = 0.75
@@ -541,6 +554,54 @@ func _build_finish() -> void:
 		gantry.add_child(cube)
 		_spinners.append(cube)
 
+	# Five start lights in a housing on top of the beam, between the spinning finish boxes:
+	# red one by one, then green.
+	var spacing := clampf((half * 0.55 - 1.2) * 0.5, 0.45, 0.7)
+	box_into(_static, frame * Transform3D(Basis.IDENTITY, Vector3(0, 7.26, 0)), Vector3(0.9, 0.22, spacing * 4.0 + 0.8), COL_DARK)
+	var lamp_spots: Array[Transform3D] = []
+	var lamp_colors: Array[Color] = []
+	for k in START_LAMPS:
+		lamp_spots.append(Transform3D(Basis.IDENTITY, Vector3(0, 7.55, (k - (START_LAMPS - 1) * 0.5) * spacing)))
+		lamp_colors.append(COL_LAMP_OFF)
+	var lamp := SphereMesh.new()
+	lamp.radius = 0.28
+	lamp.height = 0.56
+	lamp.radial_segments = 12
+	lamp.rings = 6
+	_start_material = lights_material(0.0, 1.0, 3.2)
+	var lamps := _multimesh(lamp, _start_material, lamp_spots, lamp_colors, gantry)
+	lamps.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	_start_lamps = lamps.multimesh
+	set_start_lights("idle")
+
+	# Chase lights: up one pillar, across both edges of the beam and down the other pillar.
+	var bulbs: Array[Transform3D] = []
+	var phases: Array[Color] = []
+	var colors := [Color("#ae63de"), Color("#11bba9")]
+	for face in [-1.0, 1.0]:
+		var x: float = face * 0.5
+		var run := 0.0
+		for k in 9:
+			bulbs.append(Transform3D(Basis.IDENTITY, Vector3(x, 0.9 + k * 0.62, -post_offset)))
+			run += 0.62
+			phases.append(bulb_color(colors[k % 2], run))
+		var across := int((post_offset * 2.0) / 0.62)
+		for k in across + 1:
+			bulbs.append(Transform3D(Basis.IDENTITY, Vector3(x, 7.05, -post_offset + k * 0.62)))
+			run += 0.62
+			phases.append(bulb_color(colors[k % 2], run))
+		for k in 9:
+			bulbs.append(Transform3D(Basis.IDENTITY, Vector3(x, 0.9 + (8 - k) * 0.62, post_offset)))
+			run += 0.62
+			phases.append(bulb_color(colors[k % 2], run))
+	var bulb := SphereMesh.new()
+	bulb.radius = 0.12
+	bulb.height = 0.24
+	bulb.radial_segments = 8
+	bulb.rings = 4
+	var chase := _multimesh(bulb, lights_material(0.7, 6.0, 2.6, 0.18), bulbs, phases, gantry)
+	chase.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+
 
 ## A solid wedge. `pos` is where the slope meets the ground; the car drives up along `headingDeg`.
 func _build_ramp(ramp: Dictionary) -> void:
@@ -744,6 +805,30 @@ func _build_barriers() -> void:
 
 	if barriers.is_empty():
 		return
+
+	# Amber marker lights on the posts round the outside of every bend, chasing the way the
+	# cars go, so the line through the corner reads from far away.
+	var markers: Array[Transform3D] = []
+	var marker_phases: Array[Color] = []
+	for barrier in barriers:
+		var run_points: PackedVector2Array = barrier.points
+		var indices: PackedInt32Array = barrier.indices
+		var side: float = barrier.side
+		for k in range(0, run_points.size(), 2):
+			var i := indices[k]
+			if absf(curvature[i]) < KERB_CURVATURE or -signf(curvature[i]) != side:
+				continue
+			markers.append(Transform3D(Basis.IDENTITY, _v(run_points[k], 0.95)))
+			marker_phases.append(bulb_color(COL_LAMP_AMBER, float(k) * 1.7))
+	if not markers.is_empty():
+		var marker := SphereMesh.new()
+		marker.radius = 0.17
+		marker.height = 0.34
+		marker.radial_segments = 8
+		marker.rings = 4
+		var instance := _multimesh(marker, lights_material(0.9, 5.0, 2.4, 0.2), markers, marker_phases)
+		instance.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+
 	var rails_instance := _add_mesh(rails.commit(), _flat_material())
 	rails_instance.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
 
@@ -780,7 +865,68 @@ func _barrier_fits(p: Vector2, offset: float) -> bool:
 	return not is_occupied(spot)
 
 
-func _multimesh(mesh: Mesh, material: Material, transforms: Array[Transform3D], colors: Array[Color] = []) -> MultiMeshInstance3D:
+## Little lights set into both edges of the road, pulsing forward round the lap at about the
+## speed of a car, like the lights along a runway.
+func _build_road_studs() -> void:
+	var half := road_width * 0.5
+	var count := path.size()
+	var studs: Array[Transform3D] = []
+	var phases: Array[Color] = []
+	var distance := 0.0
+	for i in count:
+		if i % STUD_EVERY == 0:
+			var right := right_of(tangents[i])
+			var yaw := -atan2(tangents[i].y, tangents[i].x)
+			for side in [-1.0, 1.0]:
+				var p: Vector2 = path[i] + right * side * (half - 0.08)
+				studs.append(Transform3D(Basis(Vector3.UP, yaw), _v(p, 0.08)))
+				phases.append(bulb_color(Color("#3fe0cf"), distance / STUD_WAVE * 10.0))
+		distance += path[i].distance_to(path[(i + 1) % count])
+	var stud := BoxMesh.new()
+	stud.size = Vector3(0.34, 0.06, 0.16)
+	var instance := _multimesh(stud, lights_material(0.8, 10.0, 2.2, 0.08), studs, phases)
+	instance.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+
+
+## The start lights. "idle": a slow amber sweep between runs. "red": `lit` of the five on,
+## for the countdown. "green": all green, for GO. "finish": flashing white.
+func set_start_lights(mode: String, lit := 0) -> void:
+	if not _start_lamps:
+		return
+	var pattern := mode == "idle" or mode == "finish"
+	_start_material.set_shader_parameter("speed", 0.55 if mode == "idle" else (3.0 if mode == "finish" else 0.0))
+	_start_material.set_shader_parameter("sharpness", 3.0 if pattern else 1.0)
+	for k in START_LAMPS:
+		var color := COL_LAMP_OFF
+		match mode:
+			"idle":
+				color = bulb_color(COL_LAMP_AMBER, k * 1.6)
+			"red":
+				color = COL_LAMP_RED if k < lit else COL_LAMP_OFF
+			"green":
+				color = COL_LAMP_GREEN
+			"finish":
+				color = bulb_color(Color.WHITE, 5.0 * (k % 2))
+		_start_lamps.set_instance_color(k, color)
+
+
+## A bulb's instance colour: its colour, with where it sits in the pattern in the alpha.
+## `step` is in tenths of a cycle.
+static func bulb_color(color: Color, step: float) -> Color:
+	return Color(color.r, color.g, color.b, fposmod(step * 0.1, 1.0))
+
+
+static func lights_material(speed: float, sharpness: float, energy: float, dim := 0.12) -> ShaderMaterial:
+	var material := ShaderMaterial.new()
+	material.shader = LIGHTS_SHADER
+	material.set_shader_parameter("speed", speed)
+	material.set_shader_parameter("sharpness", sharpness)
+	material.set_shader_parameter("energy", energy)
+	material.set_shader_parameter("dim", dim)
+	return material
+
+
+func _multimesh(mesh: Mesh, material: Material, transforms: Array[Transform3D], colors: Array[Color] = [], parent: Node3D = self) -> MultiMeshInstance3D:
 	var multimesh := MultiMesh.new()
 	multimesh.transform_format = MultiMesh.TRANSFORM_3D
 	multimesh.use_colors = not colors.is_empty()
@@ -793,7 +939,7 @@ func _multimesh(mesh: Mesh, material: Material, transforms: Array[Transform3D], 
 	var instance := MultiMeshInstance3D.new()
 	instance.multimesh = multimesh
 	instance.material_override = material
-	add_child(instance)
+	parent.add_child(instance)
 	return instance
 
 

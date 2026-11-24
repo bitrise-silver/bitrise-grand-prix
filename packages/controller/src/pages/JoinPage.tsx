@@ -3,11 +3,13 @@ import {
   BitkitButton,
   BitkitContentWrapper,
   BitkitEmptyState,
+  BitkitList,
   BitkitPageHeader,
+  BitkitSectionHeading,
   BitkitTextInput,
   IconFlag,
+  IconMobileLandscape,
 } from '@bitrise/bitkit-v2';
-import { Box } from '@chakra-ui/react/box';
 import { VStack } from '@chakra-ui/react/stack';
 import { Text } from '@chakra-ui/react/text';
 import { useEffect, useRef, useState, type SyntheticEvent } from 'react';
@@ -24,6 +26,7 @@ import {
   type StoredPlayer,
 } from '../api';
 import Leaderboard from '../components/Leaderboard';
+import Page from '../components/Page';
 import { useSession } from '../useSession';
 
 const CONTENT_WIDTH = 'layout/maxWidth/480';
@@ -106,7 +109,7 @@ const JoinPage = () => {
 
   if (loading || error || !session) {
     return (
-      <Box as="main">
+      <Page>
         <BitkitPageHeader contentWidth={CONTENT_WIDTH} title="Bitrise Grand Prix" />
         <BitkitContentWrapper contentWidth={CONTENT_WIDTH}>
           {error ? (
@@ -115,7 +118,7 @@ const JoinPage = () => {
             <BitkitEmptyState bodyText="Finding the session." headingText="Loading" icon={IconFlag} loading />
           )}
         </BitkitContentWrapper>
-      </Box>
+      </Page>
     );
   }
 
@@ -124,7 +127,7 @@ const JoinPage = () => {
   const track = findTrack(session.trackId);
 
   return (
-    <Box as="main">
+    <Page>
       <BitkitPageHeader
         contentWidth={CONTENT_WIDTH}
         secondaryText={`${track?.name ?? 'Bitrise Grand Prix'} · ${RACE_LAPS} laps · ${RUN_TIME_LIMIT_MS / 1000} seconds`}
@@ -194,10 +197,31 @@ const JoinPage = () => {
           </VStack>
         )}
 
+        {/* What the race is like, while they pick a name or wait to scan. */}
+        {isOpen && (
+          <VStack alignItems="stretch" as="section" gap="16">
+            <BitkitSectionHeading icon={IconMobileLandscape} label="How to race" />
+            <BitkitList colorVariant="purple" variant="explainer">
+              <BitkitList.Item helperText="Left thumb steers, right thumb accelerates. The small button brakes, then reverses.">
+                Hold your phone sideways
+              </BitkitList.Item>
+              <BitkitList.Item helperText="Each one gives you half as much speed again for a second.">
+                Drive through the Build Cache boxes
+              </BitkitList.Item>
+              <BitkitList.Item helperText="A bug halves your speed for a second. So does the grass.">Dodge the bugs</BitkitList.Item>
+              <BitkitList.Item
+                helperText={`${RACE_LAPS} laps in ${RUN_TIME_LIMIT_MS / 1000} seconds. Your best run counts, so go again as often as you like.`}
+              >
+                Beat the clock
+              </BitkitList.Item>
+            </BitkitList>
+          </VStack>
+        )}
+
         {/* Nothing to show until someone has finished a run; the join form should be the whole page. */}
         {hasResults && <Leaderboard entries={session.leaderboard} limit={5} secondaryText="Top 5, best run per driver" />}
       </BitkitContentWrapper>
-    </Box>
+    </Page>
   );
 };
 

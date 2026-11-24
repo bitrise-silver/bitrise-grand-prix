@@ -151,6 +151,7 @@ func _animate(ghost: Dictionary, node: Node3D, previous: Vector3, heading: float
 	ghost.turn = smooth_turn
 	node.call("set_wheel_speed", smooth_speed)
 	node.call("set_steer", clampf(smooth_turn / 2.7, -1.0, 1.0))
+	node.call("set_lean", clampf(smooth_turn * smooth_speed / 55.0, -1.0, 1.0))
 	if not effects or not node.visible:
 		return
 	if not ghost.has("fx"):

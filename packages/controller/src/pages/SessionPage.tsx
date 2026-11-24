@@ -13,14 +13,15 @@ import {
   IconFlag,
   IconOpenInNew,
 } from '@bitrise/bitkit-v2';
-import { Box } from '@chakra-ui/react/box';
 import { HStack, VStack } from '@chakra-ui/react/stack';
 import { Text } from '@chakra-ui/react/text';
 import { useEffect, useState } from 'react';
 import { useParams } from 'react-router';
-import { findTrack, type LeaderboardEntry, type ServerConfig } from '@bitrise-grand-prix/shared';
+import { findTrack, formatRaceTime, type LeaderboardEntry, type ServerConfig } from '@bitrise-grand-prix/shared';
 import { api, gameUrl, getAdminToken, phoneLinkUrl, qrScreenUrl } from '../api';
 import Leaderboard from '../components/Leaderboard';
+import LiveRace from '../components/LiveRace';
+import Page from '../components/Page';
 import { useSession } from '../useSession';
 
 const CONTENT_WIDTH = 'layout/maxWidth/1616';
@@ -92,7 +93,7 @@ const SessionPage = () => {
 
   if (loading || error || !session) {
     return (
-      <Box as="main">
+      <Page>
         <BitkitPageHeader
           breadcrumb={
             <BitkitBreadcrumb>
@@ -110,15 +111,18 @@ const SessionPage = () => {
             <BitkitEmptyState bodyText="Connecting to the session." headingText="Loading session" icon={IconFlag} loading />
           )}
         </BitkitContentWrapper>
-      </Box>
+      </Page>
     );
   }
 
   const isOpen = session.status === 'open';
   const track = findTrack(session.trackId);
+  const bestLaps = session.leaderboard.flatMap((entry) => (entry.bestLapMs === null ? [] : [entry.bestLapMs]));
+  const fastestLap = bestLaps.length > 0 ? formatRaceTime(Math.min(...bestLaps)) : '–';
+  const driving = session.activePlayers === 1 ? '1 driver connected' : `${session.activePlayers} drivers connected`;
 
   return (
-    <Box as="main">
+    <Page>
       <BitkitPageHeader
         badge={<BitkitBadge colorVariant={isOpen ? 'green' : 'neutral'}>{isOpen ? 'Open' : 'Closed'}</BitkitBadge>}
         breadcrumb={
@@ -181,15 +185,19 @@ const SessionPage = () => {
               icon={IconFlag}
             />
           ) : (
-            <Box asChild aspectRatio="16 / 9" border="none" borderRadius="8" width="full">
-              <iframe allow="fullscreen" src={gameUrl(session.code, true)} title={`Live race: ${session.name}`} />
-            </Box>
+            <LiveRace
+              caption={`${track?.name ?? session.trackId} · ${driving}`}
+              live={live}
+              src={gameUrl(session.code, true)}
+              title={`Live race: ${session.name}`}
+            />
           )}
           {/* Under the race rather than beside it, so the leaderboard can sit right below the QR code. */}
-          <HStack alignItems="flex-start" gap="32">
+          <HStack alignItems="flex-start" columnGap="32" flexWrap="wrap" rowGap="16">
             <BitkitStat label="Connected now" value={String(session.activePlayers)} />
             <BitkitStat label="Drivers" value={String(session.players.length)} />
             <BitkitStat label="Runs" value={String(session.runs)} />
+            <BitkitStat label="Fastest lap" value={fastestLap} />
           </HStack>
         </VStack>
 
@@ -287,7 +295,7 @@ const SessionPage = () => {
       >
         Their results are deleted and they are disconnected. This cannot be undone.
       </BitkitDialog>
-    </Box>
+    </Page>
   );
 };
 
