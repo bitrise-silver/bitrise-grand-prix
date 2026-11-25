@@ -41,6 +41,8 @@ const ICONS = {
   ci: ['ci-filled', C.green50],
   insights: ['insights-filled', C.orange60],
   'build-hub': ['build-hub-filled', C.blue50],
+  // Bitrise RDE (remote development environments), the same icon the ramp uses.
+  rde: ['remote-access', C.purple40],
   'code-push': ['code-push', C.turquoise50],
   coffee: ['coffee', C.neutral30],
   stopwatch: ['stopwatch', C.yellow60],
@@ -100,4 +102,16 @@ for (const [name, [icon, background]] of Object.entries(ICONS)) {
   parts.push('</svg>', '');
   writeFileSync(resolve(outDir, 'ramp-deck.svg'), parts.join('\n'));
   console.log('ramp-deck.svg  <-  icon-' + ICONS.ramp[0] + '-24');
+}
+
+// The roundel on every car's roof: the Bitrise badge on a white disc with a dark ring, so it
+// shows up whatever colour the car is painted. The top of the image faces the front of the car.
+{
+  const parts = [`<svg xmlns="http://www.w3.org/2000/svg" width="${SIZE}" height="${SIZE}" viewBox="0 0 ${SIZE} ${SIZE}">`];
+  parts.push(`<circle cx="128" cy="128" r="124" fill="#ffffff"/>`);
+  parts.push(`<circle cx="128" cy="128" r="112" fill="none" stroke="#2b0e3f" stroke-width="6"/>`);
+  parts.push(`<g transform="translate(26 26) scale(8.5)">${await iconMarkup('badge-bitrise')}</g>`);
+  parts.push('</svg>', '');
+  writeFileSync(resolve(outDir, 'car-roof.svg'), parts.join('\n'));
+  console.log('car-roof.svg  <-  icon-badge-bitrise-24');
 }

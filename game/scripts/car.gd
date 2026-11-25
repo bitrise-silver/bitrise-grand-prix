@@ -70,6 +70,15 @@ var _slip := 0.0
 var _last_planar := Vector2.ZERO
 var _bump := 0.0
 var _air_time := 0.0
+## Where the car is drawn and which way it points. Physics moves the car 60 times a second,
+## 0.4 m a step at full speed; drawn as is, it judders against the smoothly following camera,
+## worst on 120 Hz screens. So it is drawn between its last two physics positions instead.
+var render_position := Vector3.ZERO
+var render_heading := 0.0
+var _tick_positions: Array[Vector3] = [Vector3.ZERO, Vector3.ZERO]
+var _tick_headings: Array[float] = [0.0, 0.0]
+## Ticks left in which not to glide (right after a reset, so the car does not sweep across the map).
+var _snap_ticks := 2
 
 
 func _ready() -> void:
@@ -98,7 +107,8 @@ func _ready() -> void:
 
 	_visual = CarVisual.new()
 	_visual.color = color
-	_visual.position = Vector3(0, -RADIUS, 0)
+	# Placed every frame at the drawn position (see render_position), not carried by the body.
+	_visual.top_level = true
 	add_child(_visual)
 
 	_fx = CarFx.new()
@@ -132,6 +142,7 @@ func _ready() -> void:
 ## Puts the car on the ground at `at`, stopped and pointing along `new_heading`.
 func reset_to(at: Vector3, new_heading: float) -> void:
 	_pending_reset = {"position": at + Vector3(0, RADIUS + 0.02, 0), "heading": new_heading}
+	_snap_ticks = 2
 	effect = 0
 	_effect_left = 0.0
 	_kick = ""
@@ -231,7 +242,21 @@ func _integrate_forces(state: PhysicsDirectBodyState3D) -> void:
 	_last_planar = Vector2(planar.x, planar.z)
 
 
+func _physics_process(_delta: float) -> void:
+	# The physics position here is the one after the previous step.
+	_tick_positions = [_tick_positions[1], global_position]
+	_tick_headings = [_tick_headings[1], heading]
+	if _snap_ticks > 0:
+		_snap_ticks -= 1
+		_tick_positions[0] = global_position
+		_tick_headings[0] = heading
+
+
 func _process(delta: float) -> void:
+	var between := Engine.get_physics_interpolation_fraction()
+	render_position = _tick_positions[0].lerp(_tick_positions[1], between)
+	render_heading = lerp_angle(_tick_headings[0], _tick_headings[1], between)
+
 	# Nose follows the slope on ramps and the arc in the air.
 	var target_pitch := 0.0
 	if absf(forward_speed) > 2.0:
@@ -242,7 +267,8 @@ func _process(delta: float) -> void:
 	var corner := clampf(turn_rate * forward_speed / 55.0, -1.0, 1.0)
 	var target_slip := corner * DRIFT_ANGLE if grounded and on_road and forward_speed > 8.0 else 0.0
 	_slip = lerpf(_slip, target_slip, 1.0 - exp(-5.0 * delta))
-	_visual.rotation = Vector3(0, -(heading + _slip), _pitch)
+	_visual.global_transform = Transform3D(Basis.from_euler(Vector3(0, -(render_heading + _slip), _pitch)),
+		render_position + Vector3(0, -RADIUS, 0))
 	_visual.call("set_steer", 0.0 if controls_locked else steer_input)
 	_visual.call("set_lean", corner if grounded else 0.0)
 	_visual.call("set_effect", effect)
@@ -256,8 +282,8 @@ func _process(delta: float) -> void:
 	if _ray.is_colliding():
 		ground_y = _ray.get_collision_point().y
 	var height := maxf(0.0, global_position.y - RADIUS - ground_y)
-	_shadow.global_position = Vector3(global_position.x, ground_y + 0.1, global_position.z)
-	_shadow.global_rotation = Vector3(-PI * 0.5, -heading, 0)
+	_shadow.global_position = Vector3(render_position.x, ground_y + 0.1, render_position.z)
+	_shadow.global_rotation = Vector3(-PI * 0.5, -render_heading, 0)
 	_shadow.scale = Vector3.ONE * clampf(1.0 - height * 0.08, 0.45, 1.0)
 
 	if height > 0.3 or not grounded:

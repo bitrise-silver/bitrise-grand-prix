@@ -9,9 +9,12 @@ session on a big screen, players scan a QR code, and everyone gets the track's t
 car live in 3D. There are six tracks, from the fast Release Train Ring to the tight Hotfix
 Hairpins, each with at least two jumps.
 
-It looks like a toy racing circuit in Bitrise colours: small cars seen from high above,
-purple asphalt, Armco and tyre stacks, a grandstand full of fans, team tents, feather
-flags and trackside banners. Cars trail dust at speed, drift through the corners leaving
+It looks like a toy racing circuit in Bitrise colours: small cars seen from high above with a
+Bitrise livery (the Bitrise badge on the roof, bonnet stripes and a wing with yellow end
+plates), your own always in Bitrise purple and everyone else's in their driver's colour; purple
+asphalt, Armco and tyre stacks, a grandstand full of fans, team tents, feather flags, and
+trackside banners for Bitrise and its products (Build Cache, Insights, Release Management,
+CodePush, RDE, Build Hub). Cars trail dust at speed, drift through the corners leaving
 tyre marks and smoke, kick up dirt on the grass, steer their front wheels and lean into the
 bends. Start lights on the finish gantry count you down, chase lights run along the gantry
 and the grandstand, marker lights flash round the bends and light studs pulse along the road
@@ -67,17 +70,19 @@ Controls are on screen: the left thumb steers with a stick, and the right thumb 
 accelerate button and a smaller reverse button (which brakes first). Steering is relative to
 the car, like a real RC car, and the camera never turns, so left and right feel swapped when
 you drive towards the bottom of the screen. On a laptop use the arrow keys or WASD, Enter to
-start, and any key to skip the track intro.
+start, and any key to skip the track intro; on a laptop or desktop the on-screen controls stay
+hidden and the start panel says which keys to press.
 
 On screen while racing:
 
 - **Position**, top left: where your run stands against everyone else's best run, measured
   at the last checkpoint you passed (so it changes during the lap), with the top of the
   standings and the gap to the driver ahead.
-- **Lap and time**, top right. The remaining time appears in the last 15 seconds. Only a
-  run's total time counts and is shown: there are no lap times, on the phone or on the site.
-- An LED countdown, a short fly-over of the track before your first run, and the results
-  over the live track at the end.
+- **Lap and time**, top right. The lap number pulses as you cross the line, yellow for the
+  last lap. The remaining time appears in the last 15 seconds. Only a run's total time counts
+  and is shown: there are no lap times, on the phone or on the site.
+- An LED board for the countdown and for how the run ended (FINISH or TIME'S UP), a short
+  fly-over of the track before your first run, and the results over the live track at the end.
 
 ## Quick start
 
@@ -106,7 +111,8 @@ To develop the controller site with hot reload, run `npm run dev:controller` as 
 4. Players scan the code, enter a driver name and race. They can go again as often as they like.
    Someone whose camera will not read the code can be sent a join link instead: **Share join
    link** on the QR screen makes one that works once, for three minutes.
-5. **Close session** when you are done. Results are kept and the session can be reopened.
+5. For people without a phone, set up a laptop station. See [A laptop station](#a-laptop-station).
+6. **Close session** when you are done. Results are kept and the session can be reopened.
 
 ### A phone for the QR code
 
@@ -155,10 +161,24 @@ Everything the site does goes through the HTTP API, so sessions can also be scri
 | POST | `/api/sessions/:code/screen-key` | yes | A key for the QR phone; replaces the previous one |
 | GET | `/api/sessions/:code/join-code` | yes, or `X-Screen-Key` | The QR screen's current join code |
 | POST | `/api/sessions/:code/tickets` | | Trade a join code (`token`) for a one-time join ticket |
+| POST | `/api/sessions/:code/station-key` | yes | A key for the laptop station; replaces the previous one |
+| POST | `/api/sessions/:code/station-ticket` | `X-Station-Key` | A one-time join ticket for the laptop station's next driver |
 | POST | `/api/sessions/:code/players` | | Join (`name`, `ticket`); returns the player's token |
 | DELETE | `/api/sessions/:code/players/:id` | yes | Remove a player and their results |
 
 "Admin" routes need `Authorization: Bearer <ADMIN_TOKEN>` when `ADMIN_TOKEN` is set.
+
+### A laptop station
+
+A laptop at the booth where people without a phone can race with the keyboard. Press **Copy
+laptop link** on the session page, send the link to the booth laptop the same way as the phone
+link, and open it there. From then on the laptop shows a name box: each driver types a name,
+presses Enter and races with WASD or the arrow keys. When the run is over, **Race again** lets
+them go again and **Next driver** (or Esc) brings the name box back for the next person.
+
+The laptop keeps a key that can join drivers to this one session and do nothing else. Anyone
+holding the link could join drivers from anywhere, so keep it on that laptop. Making a new
+laptop link stops the old one.
 
 ## Configuration
 
@@ -265,6 +285,9 @@ for what the code licence does and does not cover.
 - The QR screen can also trade its current code for a ticket itself and share it as a join
   link, for someone who cannot scan. The ticket travels after `#` like the screen key, works
   once, and runs out after three minutes.
+- A laptop station's key stands in for scanning: it gets a one-time ticket for each new
+  driver, for its one session, and nothing else. It travels after `#` like the screen key, and
+  making a new one cancels the old.
 
 **Results.** Physics runs on the phone, so a phone's word about its lap times counts for
 nothing. Phones only report where their car is, about ten times a second; the server's

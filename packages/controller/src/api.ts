@@ -6,6 +6,7 @@ import type {
   ScreenKeyResponse,
   ServerConfig,
   SessionSummary,
+  StationKeyResponse,
   TrackInfo,
 } from '@bitrise-grand-prix/shared';
 
@@ -101,6 +102,17 @@ export const api = {
     request<ScreenKeyResponse>(`/api/sessions/${encodeURIComponent(code)}/screen-key`, { method: 'POST' }, true, adminToken).then(
       (body) => body.key,
     ),
+  /** A key for the booth's laptop station. Cancels the previous one. Host only. */
+  createStationKey: (code: string) =>
+    request<StationKeyResponse>(`/api/sessions/${encodeURIComponent(code)}/station-key`, { method: 'POST' }, true).then(
+      (body) => body.key,
+    ),
+  /** A one-time ticket for the laptop station's next driver: its key stands in for a QR scan. */
+  stationTicket: (code: string, key: string) =>
+    request<JoinTicketResponse>(`/api/sessions/${encodeURIComponent(code)}/station-ticket`, {
+      method: 'POST',
+      headers: { 'x-station-key': key },
+    }),
   /** Trades a scanned join code for a one-time ticket. */
   exchangeJoinCode: (code: string, token: string) =>
     request<JoinTicketResponse>(`/api/sessions/${encodeURIComponent(code)}/tickets`, {
@@ -196,3 +208,18 @@ export const setScreenKey = (code: string, key: string | null) => writeStorage(s
 
 export const gameUrl = (code: string, spectate = false) =>
   `/game/index.html?s=${encodeURIComponent(code)}${spectate ? '&spectate=1' : ''}`;
+
+/**
+ * The booth's laptop station for a session, with its key. Like the phone link, the key sits in
+ * the #fragment, which browsers never send to a server or pass on as a referrer.
+ */
+export const stationUrl = (config: ServerConfig, code: string, key: string) =>
+  `${siteUrl(config)}/station/${encodeURIComponent(code)}#key=${encodeURIComponent(key)}`;
+
+const stationKeyKey = (code: string) => `bitrise-grand-prix:station-key:${code.toUpperCase()}`;
+
+export const getStationKey = (code: string) => readStorage(stationKeyKey(code));
+export const setStationKey = (code: string, key: string | null) => writeStorage(stationKeyKey(code), key);
+
+/** The game for a driver who joined at the laptop station; its results offer the next driver a go. */
+export const stationGameUrl = (code: string) => `${gameUrl(code)}&station=1`;

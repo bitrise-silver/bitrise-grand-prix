@@ -6,12 +6,14 @@ import JoinPage from './pages/JoinPage';
 import QrScreenPage from './pages/QrScreenPage';
 import SessionPage from './pages/SessionPage';
 import SessionsPage from './pages/SessionsPage';
+import StationPage from './pages/StationPage';
 
 const router = createBrowserRouter([
   { path: '/', element: <SessionsPage /> },
   { path: '/session/:code', element: <SessionPage /> },
   { path: '/session/:code/qr', element: <QrScreenPage /> },
   { path: '/join/:code', element: <JoinPage /> },
+  { path: '/station/:code', element: <StationPage /> },
   { path: '*', element: <SessionsPage /> },
 ]);
 

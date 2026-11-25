@@ -132,6 +132,15 @@ export interface ScreenKeyResponse {
   key: string;
 }
 
+/**
+ * A link for the booth's laptop station. The key in it gets one-time join tickets for one
+ * session, so drivers there can join one after another without scanning the QR code. Creating
+ * a new one cancels the old.
+ */
+export interface StationKeyResponse {
+  key: string;
+}
+
 /** What a phone gets for a valid join code: one go at joining, within a few minutes. */
 export interface JoinTicketResponse {
   ticket: string;

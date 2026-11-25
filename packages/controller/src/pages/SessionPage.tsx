@@ -17,13 +17,37 @@ import { Text } from '@chakra-ui/react/text';
 import { useEffect, useState } from 'react';
 import { useParams } from 'react-router';
 import { findTrack, type LeaderboardEntry, type ServerConfig } from '@bitrise-grand-prix/shared';
-import { api, gameUrl, getAdminToken, phoneLinkUrl, qrScreenUrl } from '../api';
+import { api, gameUrl, getAdminToken, phoneLinkUrl, qrScreenUrl, stationUrl } from '../api';
 import Leaderboard from '../components/Leaderboard';
 import LiveRace from '../components/LiveRace';
 import Page from '../components/Page';
 import { useSession } from '../useSession';
 
 const CONTENT_WIDTH = 'layout/maxWidth/1616';
+
+/** The two links the host hands to other devices at the booth, and what to say about each. */
+const LINKS = {
+  phone: {
+    failure: 'Could not make a phone link',
+    copiedTitle: 'Phone link copied',
+    copiedText:
+      'Send it to the phone that will show the QR code, for example by AirDrop or a message to yourself. Any earlier phone link has stopped working.',
+    dialogTitle: 'Phone link',
+    dialogText:
+      'This browser cannot copy here, so copy the link yourself and send it to the phone that will show the QR code. Anyone with the link can show join codes for this session, so close this before others can see it.',
+  },
+  laptop: {
+    failure: 'Could not make a laptop station link',
+    copiedTitle: 'Laptop station link copied',
+    copiedText:
+      'Open it on the booth laptop. Each driver types a name and races with the keyboard, then the next one has a go. Any earlier laptop station link has stopped working.',
+    dialogTitle: 'Laptop station link',
+    dialogText:
+      'This browser cannot copy here, so copy the link yourself and open it on the booth laptop. Anyone with the link can join drivers to this session, so close this before others can see it.',
+  },
+} as const;
+
+type LinkKind = keyof typeof LINKS;
 
 /** The host's big screen for one session: the live race and the standings. The QR code has its own screen. */
 const SessionPage = () => {
@@ -34,8 +58,8 @@ const SessionPage = () => {
   const [confirmClose, setConfirmClose] = useState(false);
   const [removing, setRemoving] = useState<LeaderboardEntry | null>(null);
   const [busy, setBusy] = useState(false);
-  /** A phone link this browser could not copy, shown so it can be copied by hand. */
-  const [shownLink, setShownLink] = useState<string | null>(null);
+  /** A link this browser could not copy, shown so it can be copied by hand. */
+  const [shownLink, setShownLink] = useState<{ kind: LinkKind; url: string } | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -71,24 +95,24 @@ const SessionPage = () => {
     }
   };
 
-  // A link for the phone (or tablet) that shows the QR code at the booth. It goes to the
-  // clipboard rather than on screen, because this page is usually the big screen.
-  const copyPhoneLink = (sessionCode: string) =>
+  // A link for the phone (or tablet) that shows the QR code at the booth, or for the laptop
+  // drivers join at. It goes to the clipboard rather than on screen, because this page is
+  // usually the big screen.
+  const copyLink = (sessionCode: string, kind: LinkKind) =>
     run(async () => {
       if (!config) return;
-      const link = phoneLinkUrl(config, sessionCode, await api.createScreenKey(sessionCode));
+      const url =
+        kind === 'phone'
+          ? phoneLinkUrl(config, sessionCode, await api.createScreenKey(sessionCode))
+          : stationUrl(config, sessionCode, await api.createStationKey(sessionCode));
       try {
-        await navigator.clipboard.writeText(link);
-        createBitkitToast({
-          messageText: 'Send it to the phone that will show the QR code, for example by AirDrop or a message to yourself. Any earlier phone link has stopped working.',
-          titleText: 'Phone link copied',
-          variant: 'success',
-        });
+        await navigator.clipboard.writeText(url);
+        createBitkitToast({ messageText: LINKS[kind].copiedText, titleText: LINKS[kind].copiedTitle, variant: 'success' });
       } catch {
         // No clipboard here (plain HTTP on the network, or the browser said no): show it instead.
-        setShownLink(link);
+        setShownLink({ kind, url });
       }
-    }, 'Could not make a phone link');
+    }, LINKS[kind].failure);
 
   if (loading || error || !session) {
     return (
@@ -133,12 +157,22 @@ const SessionPage = () => {
       >
         <BitkitButton
           disabledReason={lockedReason}
-          onClick={() => void copyPhoneLink(session.code)}
+          onClick={() => void copyLink(session.code, 'phone')}
           state={!canManage ? 'disabled' : busy ? 'loading' : undefined}
           variant="secondary"
         >
           Copy phone link
         </BitkitButton>
+        {isOpen && (
+          <BitkitButton
+            disabledReason={lockedReason}
+            onClick={() => void copyLink(session.code, 'laptop')}
+            state={!canManage ? 'disabled' : busy ? 'loading' : undefined}
+            variant="secondary"
+          >
+            Copy laptop link
+          </BitkitButton>
+        )}
         <BitkitButton href={qrScreenUrl(session.code)} isExternal suffixIcon={IconOpenInNew} variant="secondary">
           QR screen
         </BitkitButton>
@@ -215,14 +249,11 @@ const SessionPage = () => {
         }}
         open={shownLink !== null}
         size="md"
-        title="Phone link"
+        title={LINKS[shownLink?.kind ?? 'phone'].dialogTitle}
       >
         <VStack alignItems="stretch" gap="16">
-          <Text textStyle="body/md/regular">
-            This browser cannot copy here, so copy the link yourself and send it to the phone that will show the QR code.
-            Anyone with the link can show join codes for this session, so close this before others can see it.
-          </Text>
-          {shownLink && <BitkitCodeSnippet variant="single">{shownLink}</BitkitCodeSnippet>}
+          <Text textStyle="body/md/regular">{LINKS[shownLink?.kind ?? 'phone'].dialogText}</Text>
+          {shownLink && <BitkitCodeSnippet variant="single">{shownLink.url}</BitkitCodeSnippet>}
         </VStack>
       </BitkitDialog>
 

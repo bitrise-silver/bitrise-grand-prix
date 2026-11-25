@@ -35,7 +35,7 @@
     { "pos": [-58, 10], "headingDeg": 270, "length": 7, "width": 5, "angleDeg": 16 }
   ],
   "boosts": [
-    { "at": 1.5, "offset": 0 },
+    { "at": 1.9, "offset": 0 },
     { "at": 5.8, "offset": -2 },
     { "at": 11.5, "offset": 0 },
     { "at": 16.5, "offset": 0 },

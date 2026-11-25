@@ -180,6 +180,51 @@ describe('the QR screen on another device', () => {
   });
 });
 
+describe('the laptop station', () => {
+  it('joins one driver after another without a QR scan', async () => {
+    const { session, call, post } = await start();
+    const created = await call(`/api/sessions/${session.code}/station-key`, { method: 'POST', admin: true });
+    expect(created.status).toBe(201);
+    const { key } = (await created.json()) as { key: string };
+    const asStation = (path: string) =>
+      call(path, { method: 'POST', headers: { 'x-station-key': key } } as RequestInit);
+
+    for (const name of ['Ada', 'Grace']) {
+      const issued = await asStation(`/api/sessions/${session.code}/station-ticket`);
+      expect(issued.status).toBe(201);
+      const { ticket } = (await issued.json()) as { ticket: string };
+      expect((await post(`/api/sessions/${session.code}/players`, { name, ticket })).status).toBe(201);
+    }
+    // The key does nothing else.
+    expect((await call(`/api/sessions/${session.code}/join-code`, { headers: { 'x-screen-key': key } } as RequestInit)).status).toBe(401);
+    expect((await asStation(`/api/sessions/${session.code}/close`)).status).toBe(401);
+  });
+
+  it('only the host makes a station link, and a new one cancels the old', async () => {
+    const { session, call } = await start();
+    expect((await call(`/api/sessions/${session.code}/station-key`, { method: 'POST' })).status).toBe(401);
+    const make = async () =>
+      ((await (await call(`/api/sessions/${session.code}/station-key`, { method: 'POST', admin: true })).json()) as { key: string }).key;
+    const first = await make();
+    const second = await make();
+    const ticket = (key: string) =>
+      call(`/api/sessions/${session.code}/station-ticket`, { method: 'POST', headers: { 'x-station-key': key } } as RequestInit);
+    expect((await ticket(first)).status).toBe(401);
+    expect((await ticket('made-up')).status).toBe(401);
+    expect((await ticket(second)).status).toBe(201);
+  });
+
+  it('stops handing out tickets when the session closes', async () => {
+    const { session, call } = await start();
+    const { key } = (await (await call(`/api/sessions/${session.code}/station-key`, { method: 'POST', admin: true })).json()) as {
+      key: string;
+    };
+    await call(`/api/sessions/${session.code}/close`, { method: 'POST', admin: true });
+    const issued = await call(`/api/sessions/${session.code}/station-ticket`, { method: 'POST', headers: { 'x-station-key': key } } as RequestInit);
+    expect(issued.status).toBe(409);
+  });
+});
+
 describe('admin', () => {
   it('locks session management behind the token when one is set', async () => {
     const { session, call } = await start();

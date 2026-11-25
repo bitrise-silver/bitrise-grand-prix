@@ -10,6 +10,7 @@ import {
   type JoinResponse,
   type JoinTicketResponse,
   type ScreenKeyResponse,
+  type StationKeyResponse,
   type ServerConfig,
 } from '@bitrise-grand-prix/shared';
 import { JoinGate } from './joinGate.js';
@@ -258,6 +259,26 @@ export function createApp(options: AppOptions): express.Express {
   // A link for the device that will show the QR code, so it needs no admin token.
   app.post('/api/sessions/:code/screen-key', requireAdmin, (req, res) => {
     const response: ScreenKeyResponse = { key: store.createScreenKey(param(req, 'code')) };
+    res.status(201).set('Cache-Control', 'no-store').json(response);
+  });
+
+  // A link for the booth's laptop station, so drivers there can join without a phone.
+  app.post('/api/sessions/:code/station-key', requireAdmin, (req, res) => {
+    const response: StationKeyResponse = { key: store.createStationKey(param(req, 'code')) };
+    res.status(201).set('Cache-Control', 'no-store').json(response);
+  });
+
+  // The laptop station asks for a ticket for its next driver; its key stands in for a scan.
+  app.post('/api/sessions/:code/station-ticket', ticketLimit, (req, res) => {
+    const session = store.requireSession(param(req, 'code'));
+    if (!store.checkStationKey(session, req.get('x-station-key'))) {
+      adminAttempts(req, res, () => res.status(401).json({ error: 'This laptop station link is wrong or has been replaced.' }));
+      return;
+    }
+    if (session.status !== 'open') throw new StoreError(409, 'This session is closed.');
+    const ticket = joinGate.createTicket(session.code, joinGate.issue(session.code).token);
+    if (!ticket) throw new StoreError(500, 'Could not make a ticket. Try again.');
+    const response: JoinTicketResponse = ticket;
     res.status(201).set('Cache-Control', 'no-store').json(response);
   });
 

@@ -11,6 +11,8 @@ extends CanvasLayer
 ## jumping back to the grid between runs.
 
 signal primary_pressed
+## The quieter button under the results: Next driver, at a laptop station.
+signal secondary_pressed
 signal skip_requested
 ## The speaker button was tapped.
 signal sound_toggled(on: bool)
@@ -41,11 +43,14 @@ var sticks_enabled := false:
 		if not value:
 			_release_all()
 		if _steer_stick:
-			var shown := value and not spectating
+			var shown := value and not spectating and touch_controls
 			_steer_stick.visible = shown
 			_gas_button.visible = shown
 			_reverse_button.visible = shown
 var spectating := false
+## Whether to draw the stick and pedals. Off on a laptop without a touch screen, where the keys
+## drive; the first touch turns them on anyway.
+var touch_controls := true
 
 var _font: FontVariation
 var _root: Control
@@ -66,16 +71,20 @@ var _gap_label: Label
 var _right: VBoxContainer
 var _lap_number: Label
 var _lap_total: Label
+## The lap the counter shows, so a new one can be greeted with a pulse.
+var _lap_shown := 0
+var _lap_tween: Tween
 var _time_value: Label
 var _warning_label: Label
 var _status_label: Label
-var _banner: Label
-var _banner_tween: Tween
 var _toast: PanelContainer
 var _toast_label: Label
 var _toast_style: StyleBoxFlat
 var _toast_tween: Tween
 var _led: LedBoard
+var _led_tween: Tween
+## How much the board is scaled down to fit the screen (1 when it fits).
+var _led_fit := 1.0
 var _intro: Control
 var _intro_bars: Array[ColorRect] = []
 var _intro_title: Label
@@ -92,6 +101,7 @@ var _results_time: Label
 var _results_subtitle: Label
 var _results_rows: VBoxContainer
 var _results_button: Button
+var _results_secondary: Button
 var _portrait: Control
 var _steer_stick: TouchStick
 var _gas_button: PedalButton
@@ -225,17 +235,32 @@ class SoundButton extends Control:
 			draw_line(c + Vector2(7, 4), c + Vector2(18, -7), cross, 3.5, true)
 
 
-## A dot-matrix LED board for the countdown: 3, 2, 1, GO.
+## A dot-matrix LED board: the countdown (3, 2, 1, GO) and how a run ends (FINISH, TIME'S UP).
 class LedBoard extends Control:
 	const DOT := 20.0
 	const PAD := 28.0
-	## 5x7 glyphs, one string per row, "#" lit.
+	## Seven rows each, "#" lit. Most are five columns wide; I, the apostrophe and space are narrower.
 	const GLYPHS := {
 		"1": ["..#..", ".##..", "#.#..", "..#..", "..#..", "..#..", "#####"],
 		"2": [".###.", "#...#", "....#", "...#.", "..#..", ".#...", "#####"],
 		"3": ["####.", "....#", "....#", ".###.", "....#", "....#", "####."],
+		"C": [".####", "#....", "#....", "#....", "#....", "#....", ".####"],
+		"D": ["####.", "#...#", "#...#", "#...#", "#...#", "#...#", "####."],
+		"E": ["#####", "#....", "#....", "####.", "#....", "#....", "#####"],
+		"F": ["#####", "#....", "#....", "####.", "#....", "#....", "#...."],
 		"G": [".###.", "#...#", "#....", "#.###", "#...#", "#...#", ".###."],
+		"H": ["#...#", "#...#", "#...#", "#####", "#...#", "#...#", "#...#"],
+		"I": ["###", ".#.", ".#.", ".#.", ".#.", ".#.", "###"],
+		"L": ["#....", "#....", "#....", "#....", "#....", "#....", "#####"],
+		"M": ["#...#", "##.##", "#.#.#", "#.#.#", "#...#", "#...#", "#...#"],
+		"N": ["#...#", "##..#", "#.#.#", "#..##", "#...#", "#...#", "#...#"],
 		"O": [".###.", "#...#", "#...#", "#...#", "#...#", "#...#", ".###."],
+		"P": ["####.", "#...#", "#...#", "####.", "#....", "#....", "#...."],
+		"S": [".####", "#....", "#....", ".###.", "....#", "....#", "####."],
+		"T": ["#####", "..#..", "..#..", "..#..", "..#..", "..#..", "..#.."],
+		"U": ["#...#", "#...#", "#...#", "#...#", "#...#", "#...#", ".###."],
+		"'": ["#", "#", ".", ".", ".", ".", "."],
+		" ": ["..", "..", "..", "..", "..", "..", ".."],
 	}
 	var text := ""
 	var color := Color("#f9cc15")
@@ -248,8 +273,14 @@ class LedBoard extends Control:
 	func _init() -> void:
 		mouse_filter = Control.MOUSE_FILTER_IGNORE
 
+	func _glyph(character: String) -> Array:
+		return GLYPHS.get(character, GLYPHS[" "])
+
 	func columns() -> int:
-		return text.length() * 6 - 1
+		var total := maxi(0, text.length() - 1)
+		for index in text.length():
+			total += (_glyph(text[index])[0] as String).length()
+		return total
 
 	func board_size() -> Vector2:
 		return Vector2(columns() * DOT + PAD * 2.0, 7 * DOT + PAD * 2.0)
@@ -265,12 +296,14 @@ class LedBoard extends Control:
 		frame.shadow_size = 12
 		draw_style_box(frame, Rect2(Vector2.ZERO, size_now))
 		var lit_columns := reveal * columns()
+		var left := 0
 		for index in text.length():
-			var glyph: Array = GLYPHS.get(text[index], [])
+			var glyph := _glyph(text[index])
+			var width := (glyph[0] as String).length()
 			for row in glyph.size():
 				var line: String = glyph[row]
-				for column in 5:
-					var x := index * 6 + column
+				for column in width:
+					var x := left + column
 					var center := Vector2(PAD + (x + 0.5) * DOT, PAD + (row + 0.5) * DOT)
 					var lit := line[column] == "#" and x < lit_columns
 					if lit:
@@ -279,6 +312,7 @@ class LedBoard extends Control:
 						draw_circle(center, DOT * 0.18, color.lightened(0.6))
 					else:
 						draw_circle(center, DOT * 0.32, Color(1, 1, 1, 0.07))
+			left += width + 1
 
 
 ## A phone turning on its side, for the "please hold it in landscape" card.
@@ -311,6 +345,7 @@ class RotateHint extends Control:
 
 
 func _ready() -> void:
+	touch_controls = has_touch_screen()
 	_font = FontVariation.new()
 	_font.base_font = ThemeDB.fallback_font
 	_font.variation_embolden = 0.9
@@ -349,14 +384,6 @@ func _ready() -> void:
 	_sound_button.toggled_on.connect(func(on: bool) -> void: sound_toggled.emit(on))
 	_root.add_child(_sound_button)
 
-	_banner = _label(110, COL_TEXT)
-	_banner.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	_banner.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_banner.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	_banner.offset_bottom = -220.0
-	_banner.add_theme_constant_override("outline_size", 22)
-	_banner.modulate.a = 0.0
-	_root.add_child(_banner)
 
 	_led = LedBoard.new()
 	_led.modulate.a = 0.0
@@ -580,7 +607,7 @@ func _build_intro() -> void:
 		_intro.add_child(bar)
 		_intro_bars.append(bar)
 	var skip := _label(22, COL_DIM)
-	skip.text = "TAP TO SKIP"
+	skip.text = "TAP TO SKIP" if touch_controls else "PRESS ANY KEY TO SKIP"
 	skip.add_theme_constant_override("outline_size", 0)
 	skip.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_RIGHT)
 	skip.grow_horizontal = Control.GROW_DIRECTION_BEGIN
@@ -622,6 +649,27 @@ func _button(text_size: int) -> Button:
 	button.pressed.connect(func() -> void:
 		ui_clicked.emit()
 		primary_pressed.emit())
+	return button
+
+
+## An outlined button for the second choice under a main one.
+func _secondary_button(text_size: int) -> Button:
+	var button := Button.new()
+	button.custom_minimum_size = Vector2(0, 64)
+	button.add_theme_font_size_override("font_size", text_size)
+	for color_name: String in ["font_color", "font_hover_color", "font_pressed_color", "font_focus_color"]:
+		button.add_theme_color_override(color_name, COL_ACCENT)
+	var fills := {"normal": Color(0, 0, 0, 0), "hover": Color(COL_ACCENT, 0.15), "pressed": Color(COL_ACCENT, 0.3), "focus": Color(0, 0, 0, 0)}
+	for state_name: String in fills:
+		var style := _panel_style(fills[state_name], 14, Vector4(24, 6, 24, 6))
+		style.set_border_width_all(3)
+		style.border_color = COL_ACCENT
+		button.add_theme_stylebox_override(state_name, style)
+	button.button_down.connect(func() -> void: _squash(button, 0.93))
+	button.button_up.connect(func() -> void: _squash(button, 1.0))
+	button.pressed.connect(func() -> void:
+		ui_clicked.emit()
+		secondary_pressed.emit())
 	return button
 
 
@@ -722,6 +770,9 @@ func _build_results() -> void:
 	column.add_child(_results_rows)
 	_results_button = _button(38)
 	column.add_child(_results_button)
+	_results_secondary = _secondary_button(30)
+	_results_secondary.visible = false
+	column.add_child(_results_secondary)
 	_results.visible = false
 
 
@@ -788,13 +839,33 @@ func _build_portrait() -> void:
 
 ## `time_left_ms` is negative when no run is in progress.
 func set_race_readout(lap: int, laps_total: int, elapsed_ms: int, time_left_ms: int) -> void:
-	_lap_number.text = str(mini(lap, laps_total))
+	var shown := mini(lap, laps_total)
+	# Crossing the line onto a new lap (not the reset to lap 1 for the next run).
+	if shown > _lap_shown and _lap_shown > 0:
+		_pulse_lap(shown == laps_total)
+	_lap_shown = shown
+	_lap_number.text = str(shown)
 	_lap_total.text = "/%d" % laps_total
 	_time_value.text = format_time(elapsed_ms)
 	var warn := time_left_ms >= 0 and time_left_ms <= TIME_WARNING_MS
 	_warning_label.visible = warn
 	if warn:
 		_warning_label.text = "%d s LEFT" % int(ceil(time_left_ms / 1000.0))
+
+
+## The lap number grows and springs back in a flash of colour; yellow for the last lap.
+func _pulse_lap(final_lap: bool) -> void:
+	if _lap_tween:
+		_lap_tween.kill()
+	var flash := COL_LED if final_lap else COL_ACCENT
+	_lap_number.add_theme_color_override("font_color", flash)
+	_lap_number.pivot_offset = _lap_number.size * 0.5
+	_lap_number.scale = Vector2.ONE
+	_lap_tween = create_tween()
+	_lap_tween.tween_property(_lap_number, "scale", Vector2.ONE * 1.45, 0.12).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	_lap_tween.tween_property(_lap_number, "scale", Vector2.ONE, 0.34).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	_lap_tween.parallel().tween_method(func(color: Color) -> void:
+		_lap_number.add_theme_color_override("font_color", color), flash, COL_TEXT, 0.6).set_ease(Tween.EASE_IN)
 
 
 func set_status(text: String) -> void:
@@ -915,26 +986,48 @@ func _tower_row(cells: Array, bar: Color, you: bool) -> PanelContainer:
 ## The LED countdown: "3", "2", "1", then "GO".
 func show_countdown(text: String) -> void:
 	var go := text == "GO"
-	_led.text = text
-	_led.color = COL_ACCENT if go else COL_LED
-	var board := _led.board_size()
-	_led.size = board
-	_led.pivot_offset = board * 0.5
-	# Above the middle, so it never covers the car waiting on the grid.
-	_led.position = Vector2((_root.size.x - board.x) * 0.5, maxf(MARGIN, _root.size.y * 0.27 - board.y * 0.5))
-	_led.reveal = 0.0
-	_led.scale = Vector2.ONE * 1.25
-	_led.modulate.a = 1.0
-	var tween := create_tween()
-	tween.set_parallel(true)
-	tween.tween_property(_led, "scale", Vector2.ONE, 0.16).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
-	tween.tween_property(_led, "reveal", 1.0, 0.14)
+	var tween := _pop_led(text, COL_ACCENT if go else COL_LED, 0.14)
 	tween.chain().tween_interval(0.55 if go else 0.62)
 	if go:
-		tween.chain().tween_property(_led, "scale", Vector2.ONE * 1.6, 0.25)
+		tween.chain().tween_property(_led, "scale", Vector2.ONE * 1.6 * _led_fit, 0.25)
 		tween.tween_property(_led, "modulate:a", 0.0, 0.25)
 	else:
 		tween.chain().tween_property(_led, "modulate:a", 0.0, 0.14)
+
+
+## A word on the LED board, in the countdown's style: how a run ended, or the session closing.
+## It lights up left to right, flashes twice like a trackside board, holds, then bursts away.
+func show_led(text: String, color: Color, hold := 1.2) -> void:
+	var tween := _pop_led(text, color, 0.3)
+	for flash in 2:
+		tween.chain().tween_property(_led, "modulate:a", 0.3, 0.09)
+		tween.chain().tween_property(_led, "modulate:a", 1.0, 0.09)
+	tween.chain().tween_interval(hold)
+	tween.chain().tween_property(_led, "scale", Vector2.ONE * 1.3 * _led_fit, 0.3)
+	tween.tween_property(_led, "modulate:a", 0.0, 0.3)
+
+
+## Puts `text` on the LED board with a little pop and returns the tween, to add the rest to.
+func _pop_led(text: String, color: Color, sweep: float) -> Tween:
+	if _led_tween:
+		_led_tween.kill()
+	_led.text = text
+	_led.color = color
+	var board := _led.board_size()
+	_led.size = board
+	_led.pivot_offset = board * 0.5
+	# Long words shrink to fit a narrow screen.
+	_led_fit = minf(1.0, _root.size.x * 0.86 / board.x)
+	# Above the middle, so it never covers the car waiting on the grid.
+	_led.position = Vector2((_root.size.x - board.x) * 0.5, maxf(MARGIN, _root.size.y * 0.27 - board.y * 0.5))
+	_led.reveal = 0.0
+	_led.scale = Vector2.ONE * 1.25 * _led_fit
+	_led.modulate.a = 1.0
+	_led_tween = create_tween()
+	_led_tween.set_parallel(true)
+	_led_tween.tween_property(_led, "scale", Vector2.ONE * _led_fit, 0.16).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	_led_tween.tween_property(_led, "reveal", 1.0, sweep)
+	return _led_tween
 
 
 func show_intro(on: bool) -> void:
@@ -951,23 +1044,6 @@ func show_intro(on: bool) -> void:
 
 
 ## The big one in the middle of the screen: FINISH, TIME'S UP, SESSION CLOSED.
-func show_banner(text: String, color := COL_TEXT, seconds := 0.9) -> void:
-	if _banner_tween:
-		_banner_tween.kill()
-	_banner.text = text
-	# Shrink long messages so they fit.
-	var fit := _root.size.x * 1.55 / maxf(1.0, float(text.length()))
-	_banner.add_theme_font_size_override("font_size", int(clampf(fit, 44.0, 110.0)))
-	_banner.add_theme_color_override("font_color", color)
-	_banner.modulate.a = 1.0
-	_banner.pivot_offset = _banner.size * 0.5
-	_banner.scale = Vector2.ONE * 1.25
-	_banner_tween = create_tween()
-	_banner_tween.tween_property(_banner, "scale", Vector2.ONE, 0.15)
-	_banner_tween.tween_interval(seconds)
-	_banner_tween.tween_property(_banner, "modulate:a", 0.0, 0.25)
-
-
 ## A small pill near the top for things that happen while driving (boost, bug, lap time).
 ## It pops in, holds, then drifts up and fades, without covering the road ahead.
 func show_toast(text: String, color := COL_ACCENT, seconds := 0.8) -> void:
@@ -1013,7 +1089,7 @@ func show_panel(title: String, subtitle: String, button_text: String, note := ""
 ## player's own row. When the table first opens with `count_to_ms` given, the big time counts
 ## up to it.
 func show_results(title: String, subtitle: String, button_text: String, rows: Array, highlight: int,
-		session_name: String, count_to_ms := -1) -> void:
+		session_name: String, count_to_ms := -1, secondary_text := "") -> void:
 	_close(_panel)
 	var opening := not _results.visible or _results.modulate.a < 0.5
 	_panel_open = true
@@ -1045,6 +1121,8 @@ func show_results(title: String, subtitle: String, button_text: String, rows: Ar
 	_results_rows.visible = not rows.is_empty()
 	_results_button.text = button_text
 	_results_button.visible = not button_text.is_empty()
+	_results_secondary.text = secondary_text
+	_results_secondary.visible = not secondary_text.is_empty()
 	_open(_results)
 
 
@@ -1085,6 +1163,15 @@ func _close(control: Control) -> void:
 	control.set_meta("tween", tween)
 
 
+## Phones and tablets: their main pointer is a finger. A laptop, even one with a touch screen,
+## drives with the keys. (In a browser, Godot's own check also counts its mouse-to-touch
+## emulation, which is on everywhere, so ask the page.)
+static func has_touch_screen() -> bool:
+	if OS.has_feature("web"):
+		return bool(JavaScriptBridge.eval("window.matchMedia('(pointer: coarse)').matches", true))
+	return DisplayServer.is_touchscreen_available()
+
+
 static func format_time(ms: int) -> String:
 	var centis := int(round(ms / 10.0))
 	return "%d:%02d.%02d" % [centis / 6000, (centis % 6000) / 100, centis % 100]
@@ -1102,7 +1189,12 @@ func _input(event: InputEvent) -> void:
 		if tapped:
 			skip_requested.emit()
 			return
-	if not sticks_enabled or spectating:
+	# A real finger on a device that did not look like it had one: show the stick and pedals.
+	# Mouse clicks also arrive as touches (for testing), but from the emulation device.
+	if event is InputEventScreenTouch and not touch_controls and event.device != InputEvent.DEVICE_ID_EMULATION:
+		touch_controls = true
+		sticks_enabled = sticks_enabled
+	if not sticks_enabled or spectating or not touch_controls:
 		return
 	if event is InputEventScreenTouch:
 		var touch: InputEventScreenTouch = event

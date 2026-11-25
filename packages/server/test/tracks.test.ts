@@ -34,6 +34,13 @@ describe.each(TRACK_FILES.map((track) => [track.name, track] as const))('%s', (_
     const right = rightOf(tangentAt(control, item.at));
     return [centre[0] + right[0] * item.offset, centre[1] + right[1] * item.offset];
   };
+  const rampMiddles = (track.ramps ?? []).map((ramp): Vec2 => {
+    const heading = (ramp.headingDeg * Math.PI) / 180;
+    return [
+      (ramp.pos[0] ?? 0) + (Math.cos(heading) * ramp.length) / 2,
+      (ramp.pos[1] ?? 0) + (Math.sin(heading) * ramp.length) / 2,
+    ];
+  });
 
   it('has a time limit that leaves room for a slow run', () => {
     expect(track.timeLimitMs).toBeGreaterThanOrEqual(60_000);
@@ -42,14 +49,18 @@ describe.each(TRACK_FILES.map((track) => [track.name, track] as const))('%s', (_
   });
 
   it('has at least two ramps, each on the road or a shortcut', () => {
-    expect(track.ramps?.length ?? 0).toBeGreaterThanOrEqual(2);
-    for (const ramp of track.ramps ?? []) {
-      const heading = (ramp.headingDeg * Math.PI) / 180;
-      const middle: Vec2 = [
-        (ramp.pos[0] ?? 0) + (Math.cos(heading) * ramp.length) / 2,
-        (ramp.pos[1] ?? 0) + (Math.sin(heading) * ramp.length) / 2,
-      ];
-      expect(isOnRoad(geometry, middle), `ramp at ${ramp.pos.join(', ')}`).toBe(true);
+    expect(rampMiddles.length).toBeGreaterThanOrEqual(2);
+    for (const middle of rampMiddles) {
+      expect(isOnRoad(geometry, middle), `ramp at ${middle.join(', ')}`).toBe(true);
+    }
+  });
+
+  it('keeps boosts well away from the ramps', () => {
+    for (const item of track.boosts ?? []) {
+      const [x, z] = placed(item);
+      for (const [rx, rz] of rampMiddles) {
+        expect(Math.hypot(x - rx, z - rz), `boost at ${item.at}`).toBeGreaterThan(20);
+      }
     }
   });
 

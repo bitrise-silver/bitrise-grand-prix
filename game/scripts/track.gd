@@ -675,12 +675,7 @@ func _build_ramp(ramp: Dictionary) -> void:
 		var rail := Transform3D(Basis(Vector3.BACK, angle), Vector3(length * 0.5, height * 0.5 + 0.2, z))
 		box_into(_static, frame * rail, Vector3(slope_length, 0.28, 0.22), COL_HAZARD)
 		box_into(_static, frame * Transform3D(Basis.IDENTITY, Vector3(length - 0.15, (height + 0.2) * 0.5, z)), Vector3(0.2, height + 0.2, 0.2), COL_DARK)
-
-	# The icon box, floating beside the ramp so it is easy to spot from afar.
-	var marker := Pickup.icon_cube("ramp", Color("#4f9bde"), 1.6)
-	marker.position = Vector3(-1.2, 3.6, half_width + 1.8)
-	body.add_child(marker)
-	_spinners.append(marker)
+	# No floating icon box beside it: from above, one looks just like a boost or bug box.
 
 
 ## A run of concrete blocks with hazard stripes, and a sign facing the camera.

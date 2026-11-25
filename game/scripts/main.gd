@@ -6,6 +6,8 @@ extends Node3D
 ##   /game/index.html?s=CODE&spectate=1   the big screen: every car, no controls
 ##   /game/index.html                     practice on the default track, nothing recorded
 ##   /game/index.html?track=ID            practice on another track (a file in game/tracks)
+##   ...&station=1                        joined at the booth's laptop station: results offer
+##                                        the next driver a go
 ##   ...&autopilot=1                     the car drives itself (demos, tuning lap times)
 ##   ...&debug=1                          shows the frame rate, for checking phones
 ##
@@ -22,6 +24,10 @@ const Scenery := preload("res://scripts/scenery.gd")
 const Audio := preload("res://scripts/audio.gd")
 
 const DEFAULT_TRACK := "pipeline-park"
+## Your own car is always Bitrise purple; other drivers' cars keep their colours.
+const OWN_CAR_COLOR := Color("#9247c2")
+## Shown on the start panel when there is no touch screen to drive with.
+const KEY_HINT := "Drive with W A S D or the arrow keys. Enter starts."
 const POSITION_INTERVAL := 0.1
 const WELCOME_TIMEOUT := 5.0
 ## The driving camera never turns: it keeps this angle and follows the car, looking north.
@@ -40,6 +46,8 @@ const COL_GOLD := Color("#f9cc15")
 var session_code := ""
 var spectating := false
 var autopilot := false
+## Opened from the booth's laptop station (see the site's /station page).
+var station := false
 var debug := false
 ## Who we are in the session: { playerId, token, name, color }. Empty when practising.
 var identity: Dictionary = {}
@@ -98,6 +106,7 @@ func _ready() -> void:
 	session_code = _clean_code(str(query.get("s", "")))
 	spectating = query.has("spectate")
 	autopilot = query.has("autopilot")
+	station = query.has("station")
 	debug = query.has("debug")
 
 	_setup_rendering()
@@ -107,6 +116,7 @@ func _ready() -> void:
 	hud.spectating = spectating
 	add_child(hud)
 	hud.primary_pressed.connect(_on_primary_pressed)
+	hud.secondary_pressed.connect(_next_driver)
 	hud.skip_requested.connect(_finish_intro)
 
 	# Sound starts on for players and off on the big screen, then remembers what was chosen.
@@ -216,9 +226,11 @@ func _setup_rendering() -> void:
 	# Phones report 2x-3x pixel ratios; drawing 3D at full density costs frames for no visible
 	# gain in a fast top-down game. The HUD stays sharp either way.
 	var ratio := float(JavaScriptBridge.eval("window.devicePixelRatio || 1", true))
-	var touch := bool(JavaScriptBridge.eval("('ontouchstart' in window) || navigator.maxTouchPoints > 0", true))
-	low_end = touch and not spectating
-	if ratio > 1.5:
+	var phone := Hud.has_touch_screen()
+	low_end = phone and not spectating
+	# Only phones and tablets: a laptop's high-density screen kept at full resolution and with
+	# anti-aliasing, or the car looks soft and its edges shimmer when it moves.
+	if phone and ratio > 1.5:
 		get_viewport().scaling_3d_scale = clampf(1.5 / ratio, 0.5, 1.0)
 		get_viewport().msaa_3d = Viewport.MSAA_DISABLED
 
@@ -283,7 +295,7 @@ func _build_world(track_id: String) -> void:
 
 	car = Car.new()
 	car.track = track
-	car.color = Color(str(identity.get("color", "#9247c2")))
+	car.color = OWN_CAR_COLOR
 	add_child(car)
 	car.reset_to(track.spawn_position, track.spawn_heading)
 	car.effect_applied.connect(_on_effect)
@@ -344,7 +356,7 @@ func _on_message(message: Dictionary) -> void:
 		"closed":
 			_session_open = false
 			if spectating:
-				hud.show_banner("SESSION CLOSED", Color("#f9cc15"), 4.0)
+				hud.show_led("CLOSED", Hud.COL_LED, 3.5)
 			elif race and race.state != Race.State.RACING and race.state != Race.State.COUNTDOWN:
 				_show_start_panel()
 		"removed":
@@ -528,7 +540,10 @@ func _on_finished(completed: bool, total_ms: int) -> void:
 	_last_run = {"completed": completed, "total_ms": total_ms}
 	# Only says how the run ended; the server already has the laps and times.
 	_send({"t": "run_finish", "finished": completed})
-	hud.show_banner("FINISH!" if completed else "TIME'S UP!", Color("#11bba9") if completed else Color("#ff8091"), 1.2)
+	if completed:
+		hud.show_led("FINISH", Hud.COL_ACCENT, 0.9)
+	else:
+		hud.show_led("TIME'S UP", Hud.COL_WARN, 0.9)
 	if completed:
 		audio.play("finish")
 		audio.play("cheer", 2.0)
@@ -537,7 +552,8 @@ func _on_finished(completed: bool, total_ms: int) -> void:
 		audio.play("buzzer")
 		track.set_start_lights("red", 5)
 	_lights_idle_in = 4.0
-	_result_delay = 1.4
+	# The results wait for the LED board to clear (about 1.9 s, see Hud.show_led).
+	_result_delay = 1.9
 	_autopilot_restart = 5.0
 
 
@@ -578,12 +594,13 @@ func _show_start_panel() -> void:
 		hud.show_panel("Game over", _stopped_reason, "")
 		return
 	var laps := "%d laps, %d seconds on the clock." % [_laps_total, _time_limit_ms / 1000]
+	var keys := "" if hud.touch_controls else KEY_HINT
 	if not net:
-		hud.show_panel("Practice run", laps, "START", "Not connected to a session, so nothing is recorded.")
+		hud.show_panel("Practice run", laps, "START", ("Not connected to a session, so nothing is recorded. " + keys).strip_edges())
 	elif not _session_open:
-		hud.show_results("Session closed", "", "", _board_rows(), _own_board_row(), _session_name)
+		hud.show_results("Session closed", "", "", _board_rows(), _own_board_row(), _session_name, -1, _next_driver_text())
 	else:
-		hud.show_panel(str(identity.get("name", "Ready?")), "%s\n%s" % [_session_name, laps], "START")
+		hud.show_panel(str(identity.get("name", "Ready?")), "%s\n%s" % [_session_name, laps], "START", keys)
 
 
 func _show_result_panel() -> void:
@@ -608,7 +625,20 @@ func _show_result_panel() -> void:
 			subtitle = "This run was not recorded (%s)." % str(server.get("reason", "unknown"))
 	var can_retry := not net or _session_open
 	var count_to: int = int(_last_run.get("total_ms", 0)) if completed else -1
-	hud.show_results(title, subtitle, "RACE AGAIN" if can_retry else "", _board_rows(), _own_board_row(), _session_name, count_to)
+	hud.show_results(title, subtitle, "RACE AGAIN" if can_retry else "", _board_rows(), _own_board_row(), _session_name, count_to,
+		_next_driver_text())
+
+
+## At the laptop station, the results also offer the next driver a go.
+func _next_driver_text() -> String:
+	return "NEXT DRIVER" if station and net else ""
+
+
+## Back to the laptop station's page, where the next driver types a name.
+func _next_driver() -> void:
+	if station and OS.has_feature("web"):
+		# The session code is letters and digits only (see _clean_code).
+		JavaScriptBridge.eval("window.location.assign('/station/%s')" % session_code)
 
 
 func _board_rows() -> Array:
@@ -748,6 +778,8 @@ func _read_controls(delta: float) -> void:
 		if race.state == Race.State.IDLE or race.state == Race.State.FINISHED:
 			if Input.is_action_just_pressed("ui_accept") and hud.is_panel_visible():
 				_on_primary_pressed()
+			elif station and Input.is_action_just_pressed("ui_cancel") and hud.is_panel_visible():
+				_next_driver()
 
 	car.steer_input = steer
 	car.throttle_input = throttle
@@ -768,7 +800,8 @@ func _autopilot_input() -> Vector2:
 func _camera_goal() -> Vector3:
 	var velocity := car.linear_velocity
 	var lead := Vector3(velocity.x, 0, velocity.z) * CAMERA_LEAD
-	return Vector3(car.global_position.x, 0, car.global_position.z) + lead.limit_length(11.0)
+	# Where the car is drawn, which glides between physics steps (see Car.render_position).
+	return Vector3(car.render_position.x, 0, car.render_position.z) + lead.limit_length(11.0)
 
 
 func _update_chase_camera(delta: float) -> void:

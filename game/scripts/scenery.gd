@@ -38,8 +38,9 @@ const SHIRTS := [
 	Color("#9247c2"), Color("#11bba9"), Color("#f9cc15"), Color("#f7596c"), Color("#4f9bde"),
 	Color("#f6f4f6"), Color("#fd9730"), Color("#2b0e3f"), Color("#4eb76c"), Color("#ae63de"),
 ]
-const BANNERS := ["BITRISE", "BUILD CACHE", "MOBILE CI/CD", "INSIGHTS", "RELEASE MANAGEMENT", "CODEPUSH"]
-const FLAG_ICONS := ["badge-bitrise", "bitbot", "ci", "build-hub", "code-push", "insights"]
+## Bitrise and its product lines, round the track on the Armco.
+const BANNERS := ["BITRISE", "BUILD CACHE", "MOBILE CI/CD", "INSIGHTS", "RELEASE MANAGEMENT", "CODEPUSH", "BITRISE RDE", "BUILD HUB"]
+const FLAG_ICONS := ["badge-bitrise", "bitbot", "ci", "build-hub", "code-push", "insights", "rde"]
 
 ## 1 for the big screen and desktops, lower on phones: fewer trees and spectators.
 var detail := 1.0

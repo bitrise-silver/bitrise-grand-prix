@@ -15,6 +15,16 @@ const WHEEL_RADIUS := 0.3 * MODEL_SCALE
 const STEER_ANGLE := 0.62
 ## How far the body leans out of a hard corner, in radians.
 const LEAN_ANGLE := 0.09
+## Bitrise livery, over the driver's own colour.
+const ROOF_DECAL := "res://assets/icons/car-roof.svg"
+const COL_STRIPE := Color("#f6f4f6")
+const COL_WING := Color("#2b0e3f")
+const COL_WING_TIP := Color("#f9cc15")
+## Every car's livery is the same, so it is built once and shared.
+static var _livery_mesh: Mesh
+static var _livery_material: StandardMaterial3D
+static var _roof_mesh: Mesh
+static var _roof_material: StandardMaterial3D
 
 var color := Color("#9247c2")
 var ghost := false
@@ -49,6 +59,8 @@ func _ready() -> void:
 			if wheel_name.begins_with("wheel-front"):
 				_front_wheels.append(wheel)
 	_body = model.find_child("body", true, false) as Node3D
+	if _body and not ghost:
+		_add_livery()
 
 	# Every RC car needs a wobbly antenna.
 	_antenna = Node3D.new()
@@ -109,6 +121,46 @@ func _ready() -> void:
 		_label.modulate = color.lightened(0.55)
 		_label.position = Vector3(0, 2.4, 0)
 		add_child(_label)
+
+
+## The Bitrise badge on the roof, twin stripes on the bonnet and a wing with yellow end plates.
+## The paint stays the driver's colour, so cars still tell apart. Solid cars only: see-through
+## ghosts stay plain, which keeps them cheap on phones. Built on the body, in the model's own
+## space (facing +Z, 1.3 wide, the roof about 1.0 up), so it leans with the body.
+func _add_livery() -> void:
+	if not _livery_mesh:
+		var parts := SurfaceTool.new()
+		parts.begin(Mesh.PRIMITIVE_TRIANGLES)
+		for side in [-0.13, 0.13]:
+			Track.box_into(parts, Transform3D(Basis.IDENTITY, Vector3(side, 0.695, 0.82)), Vector3(0.1, 0.012, 0.42), COL_STRIPE)
+		for side in [-0.32, 0.32]:
+			Track.box_into(parts, Transform3D(Basis.IDENTITY, Vector3(side, 0.92, -1.26)), Vector3(0.05, 0.2, 0.08), COL_WING)
+		Track.box_into(parts, Transform3D(Basis.IDENTITY, Vector3(0, 1.03, -1.28)), Vector3(1.12, 0.05, 0.3), COL_WING)
+		for side in [-0.58, 0.58]:
+			Track.box_into(parts, Transform3D(Basis.IDENTITY, Vector3(side, 1.0, -1.28)), Vector3(0.04, 0.18, 0.34), COL_WING_TIP)
+		_livery_mesh = parts.commit()
+		_livery_material = StandardMaterial3D.new()
+		_livery_material.vertex_color_use_as_albedo = true
+		_livery_material.roughness = 0.5
+		_roof_mesh = QuadMesh.new()
+		(_roof_mesh as QuadMesh).size = Vector2(0.62, 0.62)
+		_roof_material = StandardMaterial3D.new()
+		_roof_material.albedo_texture = load(ROOF_DECAL)
+		_roof_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA_SCISSOR
+		_roof_material.alpha_scissor_threshold = 0.5
+		_roof_material.roughness = 0.45
+
+	var livery := MeshInstance3D.new()
+	livery.mesh = _livery_mesh
+	livery.material_override = _livery_material
+	_body.add_child(livery)
+	var roof := MeshInstance3D.new()
+	roof.mesh = _roof_mesh
+	roof.material_override = _roof_material
+	roof.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	# Flat on the roof, with the top of the badge towards the front of the car.
+	roof.transform = Transform3D(Basis(Vector3.UP, PI) * Basis(Vector3.RIGHT, -PI * 0.5), Vector3(0, 1.012, -0.22))
+	_body.add_child(roof)
 
 
 func _process(delta: float) -> void:

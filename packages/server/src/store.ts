@@ -64,6 +64,8 @@ export interface Session {
   results: RunResult[];
   /** SHA-256 of the key that lets one device (the booth's QR phone) fetch join codes. */
   screenKeyHash?: string | null;
+  /** SHA-256 of the key that lets the booth's laptop station join drivers without a scan. */
+  stationKeyHash?: string | null;
 }
 
 export class StoreError extends Error {
@@ -94,6 +96,14 @@ export interface StoreOptions {
 }
 
 const hashToken = (token: string) => createHash('sha256').update(token).digest('hex');
+
+/** Whether `key` is the one whose hash is stored, compared in constant time. */
+function keyMatches(storedHash: string | null | undefined, key: unknown): boolean {
+  if (typeof key !== 'string' || !key || key.length > 128 || !storedHash) return false;
+  const stored = Buffer.from(storedHash);
+  const given = Buffer.from(hashToken(key));
+  return stored.length === given.length && timingSafeEqual(stored, given);
+}
 
 export function sanitizeName(raw: unknown, maxLength = MAX_NAME_LENGTH): string {
   if (typeof raw !== 'string') return '';
@@ -233,10 +243,20 @@ export class SessionStore extends EventEmitter {
   }
 
   checkScreenKey(session: Session, key: unknown): boolean {
-    if (typeof key !== 'string' || !key || key.length > 128 || !session.screenKeyHash) return false;
-    const stored = Buffer.from(session.screenKeyHash);
-    const given = Buffer.from(hashToken(key));
-    return stored.length === given.length && timingSafeEqual(stored, given);
+    return keyMatches(session.screenKeyHash, key);
+  }
+
+  /** A new key for the laptop station at the booth. The old one stops working. */
+  createStationKey(code: string): string {
+    const session = this.requireSession(code);
+    const key = randomBytes(24).toString('base64url');
+    session.stationKeyHash = hashToken(key);
+    this.touch(session);
+    return key;
+  }
+
+  checkStationKey(session: Session, key: unknown): boolean {
+    return keyMatches(session.stationKeyHash, key);
   }
 
   findPlayerByToken(session: Session, token: string): Player | undefined {
