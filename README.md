@@ -84,6 +84,10 @@ On screen while racing:
 - An LED board for the countdown and for how the run ended (FINISH or TIME'S UP), a short
   fly-over of the track before your first run, and the results over the live track at the end.
 
+The HUD and panels are set in Figtree, Bitrise's brand font (the one Bitkit uses): its
+heaviest weight for names, numbers and buttons, and Bold for sentences and tables. Its digits
+are all set to the same width, so the running time holds still as it counts.
+
 ## Quick start
 
 You need Node 22 or newer, and Godot 4.7 with its web export templates to build the game.
@@ -216,6 +220,7 @@ game/                    Godot project
   scripts/net.gd           WebSocket client
   shaders/                 grass, asphalt, car paint, crowds, flags, blinking lights
   tracks/*.json            track definitions (also read by the server)
+  assets/fonts/            Figtree, the HUD font (SIL Open Font License)
   assets/icons/            generated icon tiles
   assets/models/           Kenney Car Kit and Nature Kit models (CC0)
 packages/shared/         protocol types, constants, ranking, track geometry
@@ -300,6 +305,12 @@ positions on its own clock, and rejects a run if the car:
 - reports a clock running ahead of real time, or a lap faster than the track's `minLapMs`;
 - finishes after the track's `timeLimitMs`.
 
+The referee judges every run on the server's copy of the track, so in a session the game builds
+the track from that copy too (it comes with the welcome message) and keeps its own files for
+practice. A game exported before or after a track edit still races the boxes the referee knows
+about: one it doesn't know would make an honest run look faster than the car can go. After
+changing a track, rebuild and restart the server for it to take effect.
+
 That rules out typed-in times, teleports, speed hacks and cutting across the grass. It does
 not make cheating impossible: a bot that drives a perfect line at the car's limits passes, and
 would be about as fast as the in-game autopilot. Keep prizes proportionate; the host can
@@ -341,7 +352,9 @@ npm run typecheck
   two-second sounds instead of loops; see the note at the top of that file.
 - Driver names are filtered for length and markup only; there is no profanity filter, so use
   "remove player" for names that should not be on a big screen.
-- The built-in font covers Latin text; names in other scripts may show as boxes in the game.
+- The HUD font covers Latin, including accented letters, and falls back to Godot's built-in
+  font for Cyrillic and Greek. Names in other scripts, such as Chinese or Arabic, may show as
+  boxes in the game.
 - Not yet tested on real phones, only in a desktop browser at phone sizes. Shadows, crowds and
   trees cost frames; phones get fewer trees and smaller shadows automatically, and
   `?debug=1` shows how a phone is coping.

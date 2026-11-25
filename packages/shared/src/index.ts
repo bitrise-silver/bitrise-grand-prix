@@ -1,6 +1,8 @@
 // Types and constants shared by the session server and the controller site.
 // The Godot game speaks the same JSON protocol; see game/scripts/net.gd.
 
+import type { TrackFile } from './tracks.js';
+
 export * from './tracks.js';
 export * from './geometry.js';
 
@@ -209,7 +211,18 @@ export interface Standing {
 }
 
 export type ServerMessage =
-  | { t: 'welcome'; you: PublicPlayer | null; session: PublicSession; laps: number; timeLimitMs: number }
+  | {
+      t: 'welcome';
+      you: PublicPlayer | null;
+      session: PublicSession;
+      laps: number;
+      timeLimitMs: number;
+      /**
+       * The track file the referee judges runs on, for the game to build the track from (players
+       * and spectators only). The game's own copy may be from an older or newer export.
+       */
+      track?: TrackFile;
+    }
   | ({ t: 'standing' } & Standing)
   | { t: 'session'; session: PublicSession }
   | { t: 'snapshot'; cars: SnapshotCar[] }

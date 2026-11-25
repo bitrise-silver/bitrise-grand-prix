@@ -3,7 +3,7 @@ import type { Duplex } from 'node:stream';
 import { WebSocket, WebSocketServer, type RawData } from 'ws';
 import {
   MAX_POS_HZ,
-  findTrack,
+  findTrackFile,
   RACE_LAPS,
   SNAPSHOT_HZ,
   type CarEffect,
@@ -174,13 +174,18 @@ export class RealtimeHub {
     if (player) this.store.setConnected(session, player, true);
 
     const full = this.store.toPublic(session);
+    const track = findTrackFile(session.trackId);
     this.send(client, {
       t: 'welcome',
       you: player ? full.players.find((p) => p.id === player.id) ?? null : null,
       session: role === 'watcher' ? full : gameView(full, player?.id ?? null),
       laps: RACE_LAPS,
       // 0 (never expected) leaves the game with the limit from its own copy of the track file.
-      timeLimitMs: findTrack(session.trackId)?.timeLimitMs ?? 0,
+      timeLimitMs: track?.timeLimitMs ?? 0,
+      // The game builds the track from this copy, the one the referee judges runs on. Its own
+      // copy can come from an older or newer export, and a boost box the referee doesn't know
+      // about makes an honest run look faster than the car can go.
+      ...(role !== 'watcher' && track ? { track } : {}),
     });
     if (session.status === 'closed') this.send(client, { t: 'closed' });
 

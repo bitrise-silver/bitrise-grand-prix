@@ -1,6 +1,6 @@
 extends Node3D
-## Builds the drivable part of a track from a JSON file in res://tracks: road, kerbs, sand
-## traps, Armco barriers, the start/finish line, ramps, walls and pickups, and the lights on
+## Builds the drivable part of a track from its JSON file (the server's copy in a session, else
+## the one in res://tracks): road, kerbs, sand traps, Armco barriers, the start/finish line, ramps, walls and pickups, and the lights on
 ## them (start lights, chase lights, bend markers, road studs). Scenery (grass, trees, crowds,
 ## flags) is scenery.gd's job. Also answers "is this point on the road?" and holds the gates
 ## used for lap counting.
@@ -80,8 +80,12 @@ static func read_track_file(id: String) -> Dictionary:
 	return parsed if parsed is Dictionary else {}
 
 
-func build(id: String) -> bool:
-	data = read_track_file(id)
+## Builds track `id` from `given`, the server's copy of its file, when there is one; otherwise
+## from the game's own copy. In a session the server referees every run on its copy, and racing
+## on a different one (an older or newer export) can get honest runs flagged.
+func build(id: String, given: Dictionary = {}) -> bool:
+	var centerline: Variant = given.get("centerline")
+	data = given if centerline is Array and not (centerline as Array).is_empty() else read_track_file(id)
 	if data.is_empty():
 		push_error("Track '%s' could not be loaded." % id)
 		return false

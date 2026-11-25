@@ -28,6 +28,14 @@ const COL_DIM := Color("#c9c1cd")
 const COL_WARN := Color("#ff8091")
 const COL_LED := Color("#f9cc15")
 const COL_FADE := Color("#1d0a2b")
+## Figtree, Bitrise's brand font (the one Bitkit uses), in two parts: basic Latin, and the
+## accented letters of Latin Extended. Both are variable fonts with every weight in one file.
+const FIGTREE_LATIN := preload("res://assets/fonts/figtree-latin.woff2")
+const FIGTREE_LATIN_EXT := preload("res://assets/fonts/figtree-latin-ext.woff2")
+## Names, numbers, headings and buttons.
+const WEIGHT_HEAVY := 900
+## Sentences, table rows and small captions.
+const WEIGHT_BODY := 700
 const MARGIN := 26.0
 ## The remaining time only appears once it is worth worrying about.
 const TIME_WARNING_MS := 15_000
@@ -52,7 +60,9 @@ var spectating := false
 ## drive; the first touch turns them on anyway.
 var touch_controls := true
 
+## Figtree: the heavy weight is the theme's default; panel text uses the lighter one.
 var _font: FontVariation
+var _body_font: FontVariation
 var _root: Control
 var _fade: ColorRect
 var _fade_tween: Tween
@@ -346,11 +356,8 @@ class RotateHint extends Control:
 
 func _ready() -> void:
 	touch_controls = has_touch_screen()
-	_font = FontVariation.new()
-	_font.base_font = ThemeDB.fallback_font
-	_font.variation_embolden = 0.9
-	# A forward lean, for a bit of speed.
-	_font.variation_transform = Transform2D(Vector2(1, 0), Vector2(-0.16, 1), Vector2.ZERO)
+	_font = figtree(WEIGHT_HEAVY)
+	_body_font = figtree(WEIGHT_BODY)
 
 	_root = Control.new()
 	_root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -536,9 +543,8 @@ func _time_row(caption_text: String) -> Label:
 	_right.add_child(row)
 	var line := HBoxContainer.new()
 	row.add_child(line)
-	var caption := _label(22, COL_DIM)
+	var caption := _body_label(22, COL_DIM)
 	caption.text = caption_text
-	caption.add_theme_constant_override("outline_size", 0)
 	caption.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	line.add_child(caption)
 	var value := _label(30, COL_TEXT)
@@ -606,13 +612,13 @@ func _build_intro() -> void:
 		bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		_intro.add_child(bar)
 		_intro_bars.append(bar)
-	var skip := _label(22, COL_DIM)
+	var skip := _body_label(22, COL_DIM)
 	skip.text = "TAP TO SKIP" if touch_controls else "PRESS ANY KEY TO SKIP"
-	skip.add_theme_constant_override("outline_size", 0)
-	skip.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_RIGHT)
-	skip.grow_horizontal = Control.GROW_DIRECTION_BEGIN
-	skip.grow_vertical = Control.GROW_DIRECTION_BEGIN
-	skip.position = Vector2(-MARGIN - 150.0, -54.0)
+	# Fills the bottom bar and keeps to its right margin, however long the hint is.
+	skip.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	skip.offset_right = -MARGIN
+	skip.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	skip.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	_intro_bars[1].add_child(skip)
 
 	var center := CenterContainer.new()
@@ -703,15 +709,13 @@ func _build_panel() -> void:
 	_panel_title = _label(52, COL_TEXT)
 	_panel_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	column.add_child(_panel_title)
-	_panel_subtitle = _label(28, COL_DIM)
+	_panel_subtitle = _body_label(28, COL_DIM)
 	_panel_subtitle.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_panel_subtitle.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	_panel_subtitle.add_theme_constant_override("outline_size", 0)
 	column.add_child(_panel_subtitle)
-	_panel_note = _label(22, COL_DIM)
+	_panel_note = _body_label(22, COL_DIM)
 	_panel_note.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_panel_note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	_panel_note.add_theme_constant_override("outline_size", 0)
 	column.add_child(_panel_note)
 	_panel_button = _button(40)
 	column.add_child(_panel_button)
@@ -740,8 +744,7 @@ func _build_results() -> void:
 	heading.text = "RESULTS"
 	heading.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	header.add_child(heading)
-	_results_session = _label(24, COL_DIM)
-	_results_session.add_theme_constant_override("outline_size", 0)
+	_results_session = _body_label(24, COL_DIM)
 	header.add_child(_results_session)
 	var rule := ColorRect.new()
 	rule.color = Color(1, 1, 1, 0.25)
@@ -758,8 +761,7 @@ func _build_results() -> void:
 	detail.add_theme_constant_override("separation", -2)
 	detail.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	summary.add_child(detail)
-	_results_subtitle = _label(26, COL_TEXT)
-	_results_subtitle.add_theme_constant_override("outline_size", 0)
+	_results_subtitle = _body_label(26, COL_TEXT)
 	_results_subtitle.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	detail.add_child(_results_subtitle)
 
@@ -792,8 +794,7 @@ func _table_row(cells: Array, background: Color, text_color: Color, text_size :=
 			swatch.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 			line.add_child(swatch)
 			continue
-		var cell := _label(text_size, text_color)
-		cell.add_theme_constant_override("outline_size", 0)
+		var cell := _body_label(text_size, text_color)
 		cell.text = str(cells[i])
 		cell.clip_text = true
 		if widths[i] > 0:
@@ -828,10 +829,9 @@ func _build_portrait() -> void:
 	title.text = "Turn your phone sideways"
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	column.add_child(title)
-	var note := _label(24, COL_DIM)
+	var note := _body_label(24, COL_DIM)
 	note.text = "Bitrise Grand Prix is played in landscape."
 	note.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	note.add_theme_constant_override("outline_size", 0)
 	column.add_child(note)
 
 
@@ -963,8 +963,7 @@ func _tower_row(cells: Array, bar: Color, you: bool) -> PanelContainer:
 	var line := HBoxContainer.new()
 	line.add_theme_constant_override("separation", 10)
 	row.add_child(line)
-	var rank := _label(26, COL_ON_ACCENT if you else COL_TEXT)
-	rank.add_theme_constant_override("outline_size", 0)
+	var rank := _body_label(26, COL_ON_ACCENT if you else COL_TEXT)
 	rank.text = cells[0]
 	rank.custom_minimum_size.x = 30
 	rank.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -974,8 +973,7 @@ func _tower_row(cells: Array, bar: Color, you: bool) -> PanelContainer:
 	swatch.custom_minimum_size = Vector2(5, 26)
 	swatch.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	line.add_child(swatch)
-	var name_label := _label(26, COL_ON_ACCENT if you else COL_TEXT)
-	name_label.add_theme_constant_override("outline_size", 0)
+	var name_label := _body_label(26, COL_ON_ACCENT if you else COL_TEXT)
 	name_label.text = cells[2]
 	name_label.clip_text = true
 	name_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -1177,6 +1175,28 @@ static func format_time(ms: int) -> String:
 	return "%d:%02d.%02d" % [centis / 6000, (centis % 6000) / 100, centis % 100]
 
 
+## Figtree at `weight` (300 to 900). Letters it lacks, such as Cyrillic and Greek, come from
+## Godot's built-in font.
+static func figtree(weight: int) -> FontVariation:
+	# The Latin Extended part holds only accented letters, so Godot doesn't count it as a Latin
+	# font and would take Ł or Ő from the built-in font instead. Tell it otherwise.
+	FIGTREE_LATIN_EXT.set_script_support_override("Latn", true)
+	var font := _figtree_part(FIGTREE_LATIN, weight)
+	font.fallbacks = [_figtree_part(FIGTREE_LATIN_EXT, weight), ThemeDB.fallback_font]
+	return font
+
+
+static func _figtree_part(file: FontFile, weight: int) -> FontVariation:
+	var text_server := TextServerManager.get_primary_interface()
+	var part := FontVariation.new()
+	part.base_font = file
+	# By tag: Godot 4.7 ignores the axis when it is given as the string "wght".
+	part.variation_opentype = {text_server.name_to_tag("wght"): weight}
+	# Digits all the same width, so a running time holds still instead of shaking.
+	part.opentype_features = {text_server.name_to_tag("tnum"): 1}
+	return part
+
+
 # --- touch input ----------------------------------------------------------------------------------
 # Left thumb: the steering stick, anywhere on the left half of the screen, measured from the
 # stick's centre. Right thumb: the accelerate and reverse buttons. A finger can slide from one
@@ -1269,6 +1289,7 @@ func _release_all() -> void:
 		_reverse_button.pressed = false
 
 
+## A label in the heavy weight with a dark outline, which keeps it readable over the track.
 func _label(font_size: int, color: Color) -> Label:
 	var label := Label.new()
 	label.add_theme_font_size_override("font_size", font_size)
@@ -1276,4 +1297,13 @@ func _label(font_size: int, color: Color) -> Label:
 	label.add_theme_color_override("font_outline_color", Color(0.06, 0.02, 0.1))
 	label.add_theme_constant_override("outline_size", 10)
 	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	return label
+
+
+## A label in the lighter weight without an outline, for text on a panel: sentences, table rows
+## and small captions.
+func _body_label(font_size: int, color: Color) -> Label:
+	var label := _label(font_size, color)
+	label.add_theme_font_override("font", _body_font)
+	label.add_theme_constant_override("outline_size", 0)
 	return label

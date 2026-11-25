@@ -275,12 +275,13 @@ func _setup_scene() -> void:
 	camera.look_at(Vector3(0, 0, 5))
 
 
-func _build_world(track_id: String) -> void:
+## `server_track` is the server's copy of the track file, when it sent one.
+func _build_world(track_id: String, server_track: Dictionary = {}) -> void:
 	if track:
 		return
 	track = Track.new()
 	add_child(track)
-	if not track.build(track_id):
+	if not track.build(track_id, server_track):
 		track.build(DEFAULT_TRACK)
 	scenery = Scenery.new()
 	scenery.detail = 0.6 if low_end else 1.0
@@ -332,7 +333,9 @@ func _on_message(message: Dictionary) -> void:
 			_laps_total = int(message.get("laps", 3))
 			var session: Dictionary = message.get("session", {})
 			_apply_session(session)
-			_build_world(str(session.get("trackId", DEFAULT_TRACK)))
+			# Race the server's copy of the track: it referees the run on that one.
+			var server_track: Variant = message.get("track")
+			_build_world(str(session.get("trackId", DEFAULT_TRACK)), server_track if server_track is Dictionary else {})
 			# The server referees the run, so its time limit wins over the game's copy of the track.
 			var limit := int(message.get("timeLimitMs", 0))
 			if limit > 0:
