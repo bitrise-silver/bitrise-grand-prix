@@ -3,8 +3,8 @@ import type { Duplex } from 'node:stream';
 import { WebSocket, WebSocketServer, type RawData } from 'ws';
 import {
   MAX_POS_HZ,
+  findTrack,
   RACE_LAPS,
-  RUN_TIME_LIMIT_MS,
   SNAPSHOT_HZ,
   type CarEffect,
   type CarPose,
@@ -179,7 +179,8 @@ export class RealtimeHub {
       you: player ? full.players.find((p) => p.id === player.id) ?? null : null,
       session: role === 'watcher' ? full : gameView(full, player?.id ?? null),
       laps: RACE_LAPS,
-      timeLimitMs: RUN_TIME_LIMIT_MS,
+      // 0 (never expected) leaves the game with the limit from its own copy of the track file.
+      timeLimitMs: findTrack(session.trackId)?.timeLimitMs ?? 0,
     });
     if (session.status === 'closed') this.send(client, { t: 'closed' });
 

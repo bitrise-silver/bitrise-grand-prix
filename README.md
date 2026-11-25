@@ -4,8 +4,10 @@
 > the MIT licence, so anyone can run it at their own meetup, conference booth or team event.
 
 Phone-controlled RC car racing for conference booths and team events. A host opens a
-session on a big screen, players scan a QR code, and everyone gets 90 seconds to put in
-three fast laps on their own phone. The big screen shows every car live in 3D.
+session on a big screen, players scan a QR code, and everyone gets the track's time limit
+(90 to 130 seconds) to put in three fast laps on their own phone. The big screen shows every
+car live in 3D. There are six tracks, from the fast Release Train Ring to the tight Hotfix
+Hairpins, each with at least two jumps.
 
 It looks like a toy racing circuit in Bitrise colours: small cars seen from high above,
 purple asphalt, Armco and tyre stacks, a grandstand full of fans, team tents, feather
@@ -46,8 +48,8 @@ TypeScript (the session server) and React (the session controller site).
   checkpoints and laps happen (see [Security and fair play](#security-and-fair-play)). Thirty concurrent racers is
   roughly 300 small messages a second.
 - **Sessions are drop-in.** A session stays open until the host closes it. Each player's run
-  ends after 3 laps or 90 seconds, and they can go again. The leaderboard keeps each
-  player's best run.
+  ends after 3 laps or when the track's time limit runs out, and they can go again. The
+  leaderboard keeps each player's best run.
 
 ## The game
 
@@ -55,7 +57,7 @@ TypeScript (the session server) and React (the session controller site).
 | --- | --- | --- |
 | Boost | +50 % speed for one second | Box with the Build Cache icon |
 | Obstacle | -50 % speed for one second | Box with the bug icon |
-| Ramp | Launches you over a wall to cut a corner; too slow and you hit the wall | Chevron deck with the remote access icon |
+| Ramp | A jump. On a shortcut it launches you over a wall; too slow and you hit the wall | Chevron deck with the remote access icon |
 | Finish line | Counts a lap once every checkpoint has been passed | Gantry with the Release Management icon |
 | Grass and sand | Slows you to about 40 % | Everything that is not road |
 | Armco | Solid; you bounce off | Barriers along the track wherever there is room |
@@ -215,8 +217,13 @@ A track is one JSON file in `game/tracks/`. To add one, create the file, then im
   control-point units, so `2.5` is halfway between points 2 and 3) and `offset` (metres to
   the right of the driving direction).
 - `shortcuts`, `ramps`, `walls`: plain coordinates.
+- `ramps`: at least two (a test checks), each on the road or on a shortcut. On the road, keep
+  them narrower than the road so drivers can go round, and leave 25 m of straight to land on.
 - `minLapMs`: a lap faster than this is rejected. After changing a track or the car, run
-  `./scripts/measure-laps.sh` and set it comfortably below what a human could do.
+  `./scripts/measure-laps.sh 90 <track-id>` and set it comfortably below what a human could do:
+  the shortest legal lap at 50 m/s works.
+- `timeLimitMs`: how long a run may take. Start from the autopilot's three laps and allow about
+  1.75 times that on an easy track, up to 2 times on a narrow, twisty one.
 
 ## Icons, models and marketing art
 
@@ -267,7 +274,8 @@ positions on its own clock, and rejects a run if the car:
 - goes faster than the car can: its top speed, half as much again only just after driving
   through a boost box, and much less on grass;
 - jumps across the track, drives through a wall, leaves the arena or does not start on the grid;
-- reports a clock running ahead of real time, or a lap faster than the track's `minLapMs`.
+- reports a clock running ahead of real time, or a lap faster than the track's `minLapMs`;
+- finishes after the track's `timeLimitMs`.
 
 That rules out typed-in times, teleports, speed hacks and cutting across the grass. It does
 not make cheating impossible: a bot that drives a perfect line at the car's limits passes, and
@@ -296,10 +304,11 @@ Serve it over HTTPS. One instance holds all state in memory, so run a single rep
 ```bash
 npm test          # server tests
 npm run typecheck
-./scripts/measure-laps.sh   # autopilot lap times, headless
+./scripts/measure-laps.sh [seconds] [track-id]   # autopilot lap times, headless
 ```
 
 `/game/index.html?autopilot=1` makes the car drive itself, which is handy for demos.
+`?track=hotfix-hairpins` practises on another track (any file name in `game/tracks`).
 `?debug=1` shows the frame rate and draw calls, for checking how a phone copes.
 
 ## Known gaps

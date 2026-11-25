@@ -2,9 +2,9 @@ import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join as joinPath } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { projectStanding, RACE_LAPS, RUN_TIME_LIMIT_MS, type RunResult } from '@bitrise-grand-prix/shared';
+import { projectStanding, RACE_LAPS, type RunResult } from '@bitrise-grand-prix/shared';
 import { sanitizeName, SessionStore, StoreError } from '../src/store.js';
-import { along, driveRun, gatesPerLap, geometry, join, lapLength, setup, startRun, toLine } from './drive.js';
+import { along, driveRun, gatesPerLap, geometry, join, lapLength, setup, startRun, toLine, track } from './drive.js';
 
 describe('sanitizeName', () => {
   it('trims, collapses whitespace and limits the length', () => {
@@ -134,7 +134,7 @@ describe('runs, refereed by the server', () => {
     driveRun(ctx, finisher, 15);
     const board = ctx.store.toPublic(ctx.session).leaderboard;
     expect(board.map((entry) => entry.name)).toEqual(['Finisher', 'TwoLaps', 'OneLap']);
-    expect(board[1]).toMatchObject({ finished: false, lapsCompleted: 2, totalMs: RUN_TIME_LIMIT_MS });
+    expect(board[1]).toMatchObject({ finished: false, lapsCompleted: 2, totalMs: track.timeLimitMs });
   });
 
   it('rejects a finish the server did not see', () => {
@@ -306,7 +306,7 @@ describe('live standing', () => {
       finished: false,
       lapsCompleted: 0,
       checkpointsInLap: 1,
-      totalMs: RUN_TIME_LIMIT_MS,
+      totalMs: track.timeLimitMs,
       lapTimesMs: [],
       bestLapMs: null,
       splitsMs: [4_000],

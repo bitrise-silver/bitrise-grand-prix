@@ -1,7 +1,12 @@
 // Track files live in game/tracks so the Godot project stays self-contained. The server reads
 // the same files: their metadata for the site, and their geometry to referee runs.
 
+import codeSigningCircuit from '../../../game/tracks/code-signing-circuit.json';
+import hotfixHairpins from '../../../game/tracks/hotfix-hairpins.json';
+import mergeConflictMile from '../../../game/tracks/merge-conflict-mile.json';
+import monorepoMeander from '../../../game/tracks/monorepo-meander.json';
 import pipelinePark from '../../../game/tracks/pipeline-park.json';
+import releaseTrainRing from '../../../game/tracks/release-train-ring.json';
 
 export interface TrackInfo {
   id: string;
@@ -11,6 +16,8 @@ export interface TrackInfo {
   checkpoints: number;
   /** A lap faster than this is physically impossible and marks the run as invalid. */
   minLapMs: number;
+  /** A run ends this long after GO if it has not finished, and a slower finish does not count. */
+  timeLimitMs: number;
 }
 
 /** A track file as stored in game/tracks (see the README for what each field means). */
@@ -20,6 +27,7 @@ export interface TrackFile {
   description: string;
   roadWidth: number;
   minLapMs: number;
+  timeLimitMs: number;
   arena: { halfWidth: number; halfDepth: number };
   centerline: number[][];
   checkpoints: number[];
@@ -37,11 +45,22 @@ function toInfo(file: TrackFile): TrackInfo {
     description: file.description,
     checkpoints: file.checkpoints.length,
     minLapMs: file.minLapMs,
+    timeLimitMs: file.timeLimitMs,
   };
 }
 
-/** Add a track: drop a JSON file in game/tracks, import it here and append it. */
-export const TRACK_FILES: TrackFile[] = [pipelinePark];
+/**
+ * Add a track: drop a JSON file in game/tracks, import it here and add it. The site lists them in
+ * this order, roughly easiest first.
+ */
+export const TRACK_FILES: TrackFile[] = [
+  pipelinePark,
+  releaseTrainRing,
+  monorepoMeander,
+  mergeConflictMile,
+  codeSigningCircuit,
+  hotfixHairpins,
+];
 
 export const TRACKS: TrackInfo[] = TRACK_FILES.map(toInfo);
 

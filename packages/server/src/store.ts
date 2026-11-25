@@ -13,7 +13,6 @@ import {
   MAX_SESSION_NAME_LENGTH,
   projectStanding,
   RACE_LAPS,
-  RUN_TIME_LIMIT_MS,
   trackGeometry,
   type CarPose,
   type PlayerState,
@@ -292,7 +291,7 @@ export class SessionStore extends EventEmitter {
     };
     run.timeout = setTimeout(() => {
       if (player.run === run) this.finishRun(session, player, { finished: false });
-    }, RUN_TIME_LIMIT_MS + RUN_GRACE_MS);
+    }, this.track(session).timeLimitMs + RUN_GRACE_MS);
     run.timeout.unref?.();
     player.run = run;
     player.state = 'racing';
@@ -326,11 +325,12 @@ export class SessionStore extends EventEmitter {
     const lapTimesMs = referee.lapTimesMs.slice(0, RACE_LAPS);
     const lapsCompleted = lapTimesMs.length;
     const completed = lapsCompleted >= RACE_LAPS;
-    const totalMs = completed ? lapTimesMs.reduce((sum, ms) => sum + ms, 0) : RUN_TIME_LIMIT_MS;
+    const limitMs = this.track(session).timeLimitMs;
+    const totalMs = completed ? lapTimesMs.reduce((sum, ms) => sum + ms, 0) : limitMs;
 
     let reason = referee.violation;
     if (!reason && claim.finished && !completed) reason = 'the server did not see every lap';
-    if (!reason && completed && totalMs > RUN_TIME_LIMIT_MS) reason = 'over the time limit';
+    if (!reason && completed && totalMs > limitMs) reason = 'over the time limit';
     if (reason) {
       this.touch(session, false);
       return { accepted: false, reason };

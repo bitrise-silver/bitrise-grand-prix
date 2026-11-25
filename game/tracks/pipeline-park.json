@@ -1,9 +1,10 @@
 {
   "id": "pipeline-park",
   "name": "Pipeline Park",
-  "description": "A flowing loop with a detour through Flaky Test Hollow. Brave drivers take the ramp over the Legacy Code wall.",
+  "description": "A flowing loop with a detour through Flaky Test Hollow. Jump the finish line, and if you are brave, take the ramp over the Legacy Code wall.",
   "roadWidth": 10,
   "minLapMs": 7000,
+  "timeLimitMs": 90000,
   "arena": { "halfWidth": 84, "halfDepth": 64 },
   "centerline": [
     [-5, 40],
@@ -33,7 +34,10 @@
       ]
     }
   ],
-  "ramps": [{ "pos": [9, -39.5], "headingDeg": 180, "length": 7, "width": 6, "angleDeg": 18 }],
+  "ramps": [
+    { "pos": [9, -39.5], "headingDeg": 180, "length": 7, "width": 6, "angleDeg": 18 },
+    { "pos": [-27, 40], "headingDeg": 0, "length": 7, "width": 5, "angleDeg": 16 }
+  ],
   "walls": [{ "from": [-3, -64], "to": [-3, -22], "height": 1.5, "label": "LEGACY CODE\nDO NOT TOUCH" }],
   "boosts": [
     { "at": 0.55, "offset": 0 },
@@ -43,14 +47,14 @@
     { "at": 14.6, "offset": 1 }
   ],
   "obstacles": [
+    { "at": 0.25, "offset": -2.5 },
     { "at": 1.4, "offset": -2.5 },
     { "at": 2.6, "offset": 2.5 },
     { "at": 4.4, "offset": -2 },
     { "at": 6.6, "offset": 2 },
     { "at": 9.4, "offset": -2 },
     { "at": 11.6, "offset": 2.5 },
-    { "at": 13.5, "offset": 2.5 },
-    { "at": 15.4, "offset": -2.5 }
+    { "at": 13.5, "offset": 2.5 }
   ],
   "billboards": [
     { "at": 0.9, "offset": 12, "text": "WORKS ON\nMY MACHINE", "icon": "bitbot" },

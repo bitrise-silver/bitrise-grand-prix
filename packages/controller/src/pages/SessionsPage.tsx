@@ -20,6 +20,7 @@ import { useNavigate } from 'react-router';
 import {
   DEFAULT_TRACK_ID,
   MAX_SESSION_NAME_LENGTH,
+  RACE_LAPS,
   TRACKS,
   findTrack,
   type ServerConfig,
@@ -30,6 +31,12 @@ import Page from '../components/Page';
 import TrackPreview from '../components/TrackPreview';
 
 const CONTENT_WIDTH = 'layout/maxWidth/1280';
+
+/** What the track picker says about a track: its description, then how long a run may take. */
+function trackHelp(trackId: string): string | undefined {
+  const track = findTrack(trackId);
+  return track && `${track.description} ${RACE_LAPS} laps in at most ${track.timeLimitMs / 1000} seconds.`;
+}
 
 const formatCreated = (timestamp: number) =>
   new Date(timestamp).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' });
@@ -284,7 +291,7 @@ const SessionsPage = () => {
             value={newName}
           />
           <BitkitNativeSelect
-            helperText={findTrack(newTrack)?.description}
+            helperText={trackHelp(newTrack)}
             label="Track"
             onValueChange={setNewTrack}
             value={newTrack}

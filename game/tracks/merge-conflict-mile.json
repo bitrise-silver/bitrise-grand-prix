@@ -1,0 +1,73 @@
+{
+  "id": "merge-conflict-mile",
+  "name": "Merge Conflict Mile",
+  "description": "The longest straight in the game, with a jump halfway. Brave drivers take the ramp over the Merge Conflict wall and skip the infield.",
+  "roadWidth": 10,
+  "minLapMs": 8500,
+  "timeLimitMs": 110000,
+  "arena": { "halfWidth": 100, "halfDepth": 62 },
+  "centerline": [
+    [-60, 46],
+    [-20, 46],
+    [20, 46],
+    [56, 44],
+    [78, 30],
+    [84, 6],
+    [76, -18],
+    [58, -36],
+    [34, -42],
+    [10, -38],
+    [-2, -20],
+    [2, 2],
+    [-12, 16],
+    [-28, 6],
+    [-30, -16],
+    [-40, -36],
+    [-60, -42],
+    [-78, -28],
+    [-84, -2],
+    [-80, 24],
+    [-72, 40]
+  ],
+  "checkpoints": [3, 7, 16, 19],
+  "shortcuts": [
+    {
+      "width": 6,
+      "points": [
+        [16, -40],
+        [-40, -40]
+      ]
+    }
+  ],
+  "ramps": [
+    { "pos": [4, 46], "headingDeg": 0, "length": 7, "width": 5, "angleDeg": 16 },
+    { "pos": [-2, -40], "headingDeg": 180, "length": 7, "width": 6, "angleDeg": 18 }
+  ],
+  "walls": [{ "from": [-14, -62], "to": [-14, -4], "height": 1.5, "label": "MERGE\nCONFLICT" }],
+  "boosts": [
+    { "at": 0.4, "offset": 0 },
+    { "at": 2.6, "offset": 2 },
+    { "at": 6.0, "offset": 0 },
+    { "at": 12.0, "offset": 0 },
+    { "at": 15.8, "offset": 2 }
+  ],
+  "obstacles": [
+    { "at": 4.2, "offset": -3 },
+    { "at": 7.5, "offset": -2.5 },
+    { "at": 10.0, "offset": -2.5 },
+    { "at": 11.5, "offset": 2.5 },
+    { "at": 12.6, "offset": -2 },
+    { "at": 14.3, "offset": 2.5 },
+    { "at": 17.3, "offset": -3 },
+    { "at": 19.4, "offset": 2.5 }
+  ],
+  "billboards": [
+    { "at": 0.5, "offset": 14, "text": "<<<<<<< HEAD", "icon": "siren" },
+    { "at": 2.5, "offset": 14, "text": "LGTM,\nSHIP IT", "icon": "badge-bitrise" },
+    { "at": 5.0, "offset": 15, "text": "REBASE\nAND RACE", "icon": "code-push" },
+    { "at": 8.0, "offset": 14, "text": "RESOLVE\nCONFLICTS\nTO CONTINUE", "icon": "obstacle" },
+    { "at": 12.0, "offset": 14, "text": ">>>>>>> main", "icon": "ci" },
+    { "at": 17.0, "offset": 15, "text": "SQUASH\nAND MERGE", "icon": "bitbot" },
+    { "at": 19.5, "offset": 14, "text": "A MILE OF\nGREEN CHECKS", "icon": "insights" }
+  ]
+}

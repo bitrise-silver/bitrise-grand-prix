@@ -5,7 +5,6 @@ import { extname, join, normalize, resolve, sep } from 'node:path';
 import express, { type NextFunction, type Request, type Response } from 'express';
 import {
   RACE_LAPS,
-  RUN_TIME_LIMIT_MS,
   TRACKS,
   type JoinCodeResponse,
   type JoinResponse,
@@ -215,7 +214,6 @@ export function createApp(options: AppOptions): express.Express {
       publicUrl: options.publicUrl || null,
       lanIp: firstLanAddress(),
       raceLaps: RACE_LAPS,
-      runTimeLimitMs: RUN_TIME_LIMIT_MS,
       gameAvailable: gameAvailable(),
     };
     res.json(config);

@@ -5,7 +5,8 @@ extends Node3D
 ##   /game/index.html?s=CODE              play in session CODE (identity comes from the join page)
 ##   /game/index.html?s=CODE&spectate=1   the big screen: every car, no controls
 ##   /game/index.html                     practice on the default track, nothing recorded
-##   ...&autopilot=1                      the car drives itself (demos, tuning lap times)
+##   /game/index.html?track=ID            practice on another track (a file in game/tracks)
+##   ...&autopilot=1                     the car drives itself (demos, tuning lap times)
 ##   ...&debug=1                          shows the frame rate, for checking phones
 ##
 ## On a desktop the same options follow "--", and a joined player can be passed in for testing:
@@ -126,7 +127,7 @@ func _ready() -> void:
 	add_child(ghosts)
 
 	if session_code.is_empty():
-		_build_world(DEFAULT_TRACK)
+		_build_world(_clean_track_id(str(query.get("track", DEFAULT_TRACK))))
 		_show_start_panel()
 		return
 
@@ -161,6 +162,15 @@ func _read_query() -> Dictionary:
 		var parts := pair.split("=", true, 1)
 		result[parts[0].uri_decode()] = parts[1].uri_decode() if parts.size() > 1 else ""
 	return result
+
+
+## A track id becomes part of a file path, so allow only lower-case letters, digits and dashes.
+static func _clean_track_id(raw: String) -> String:
+	var cleaned := ""
+	for character in raw:
+		if (character >= "a" and character <= "z") or (character >= "0" and character <= "9") or character == "-":
+			cleaned += character
+	return cleaned if cleaned == raw and not cleaned.is_empty() else DEFAULT_TRACK
 
 
 ## Session codes end up inside a JavaScript snippet and a URL, so allow only letters and digits.
@@ -283,6 +293,8 @@ func _build_world(track_id: String) -> void:
 	_camera_target = track.spawn_position
 	_previous_position = track.spawn_position
 	hud.set_track_title(str(track.data.get("name", "")), _laps_total)
+	# Each track sets its own time limit. In a session the server sends the same number.
+	_time_limit_ms = int(track.data.get("timeLimitMs", _time_limit_ms))
 
 	race = Race.new()
 	race.gates = track.gates
@@ -306,10 +318,14 @@ func _on_message(message: Dictionary) -> void:
 		"welcome":
 			_welcomed = true
 			_laps_total = int(message.get("laps", 3))
-			_time_limit_ms = int(message.get("timeLimitMs", 90_000))
 			var session: Dictionary = message.get("session", {})
 			_apply_session(session)
 			_build_world(str(session.get("trackId", DEFAULT_TRACK)))
+			# The server referees the run, so its time limit wins over the game's copy of the track.
+			var limit := int(message.get("timeLimitMs", 0))
+			if limit > 0:
+				_time_limit_ms = limit
+				race.time_limit_ms = limit
 			if race and race.state == Race.State.IDLE:
 				_show_start_panel()
 			elif spectating:

@@ -16,7 +16,6 @@ import {
   JOIN_TICKET_TTL_MS,
   MAX_NAME_LENGTH,
   RACE_LAPS,
-  RUN_TIME_LIMIT_MS,
   type JoinTicketResponse,
 } from '@bitrise-grand-prix/shared';
 import {
@@ -171,7 +170,7 @@ const JoinPage = () => {
     <Page>
       <BitkitPageHeader
         contentWidth={CONTENT_WIDTH}
-        secondaryText={`${track?.name ?? 'Bitrise Grand Prix'} · ${RACE_LAPS} laps · ${RUN_TIME_LIMIT_MS / 1000} seconds`}
+        secondaryText={track ? `${track.name} · ${RACE_LAPS} laps · ${track.timeLimitMs / 1000} seconds` : `${RACE_LAPS} laps`}
         title={session.name}
       />
       <BitkitContentWrapper contentWidth={CONTENT_WIDTH}>

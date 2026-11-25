@@ -1,0 +1,62 @@
+{
+  "id": "code-signing-circuit",
+  "name": "Code Signing Circuit",
+  "description": "A small street circuit of square corners and a narrow road. Fiddly, like code signing, with a jump on two of its straights.",
+  "roadWidth": 9,
+  "minLapMs": 7500,
+  "timeLimitMs": 100000,
+  "arena": { "halfWidth": 76, "halfDepth": 54 },
+  "centerline": [
+    [30, 36],
+    [0, 36],
+    [-30, 36],
+    [-50, 36],
+    [-58, 28],
+    [-58, 0],
+    [-58, -28],
+    [-50, -36],
+    [-26, -36],
+    [-16, -30],
+    [-16, -18],
+    [-8, -12],
+    [16, -12],
+    [24, -18],
+    [24, -30],
+    [32, -36],
+    [50, -36],
+    [58, -28],
+    [58, 0],
+    [58, 28],
+    [50, 36]
+  ],
+  "checkpoints": [5, 10, 14, 18],
+  "ramps": [
+    { "pos": [10, 36], "headingDeg": 180, "length": 7, "width": 5, "angleDeg": 16 },
+    { "pos": [-58, 10], "headingDeg": 270, "length": 7, "width": 5, "angleDeg": 16 }
+  ],
+  "boosts": [
+    { "at": 1.5, "offset": 0 },
+    { "at": 5.8, "offset": -2 },
+    { "at": 11.5, "offset": 0 },
+    { "at": 16.5, "offset": 0 },
+    { "at": 18.5, "offset": 2 }
+  ],
+  "obstacles": [
+    { "at": 3.5, "offset": 2.5 },
+    { "at": 6.6, "offset": 2.5 },
+    { "at": 9.0, "offset": 2 },
+    { "at": 10.5, "offset": -2 },
+    { "at": 12.5, "offset": -2 },
+    { "at": 14.6, "offset": 2 },
+    { "at": 17.4, "offset": 2.5 },
+    { "at": 19.5, "offset": 2.5 }
+  ],
+  "billboards": [
+    { "at": 0.8, "offset": 13, "text": "PROVISIONING\nPROFILE\nEXPIRED", "icon": "siren" },
+    { "at": 4.0, "offset": 13, "text": "KEYCHAIN\nUNLOCKED", "icon": "bitbot" },
+    { "at": 8.5, "offset": 13, "text": "DID YOU TRY\nA CLEAN\nBUILD?", "icon": "coffee" },
+    { "at": 12.0, "offset": 13, "text": "CERTIFICATE\nRENEWED", "icon": "badge-bitrise" },
+    { "at": 16.5, "offset": 13, "text": "SIGNED,\nSEALED,\nSHIPPED", "icon": "code-push" },
+    { "at": 18.5, "offset": 13, "text": "TESTFLIGHT\nBOARDING", "icon": "ci" }
+  ]
+}

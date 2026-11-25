@@ -4,10 +4,9 @@
 export * from './tracks.js';
 export * from './geometry.js';
 
-/** A run is over when the player completes this many laps... */
+/** A run is over when the player completes this many laps, or when the track's time limit
+ * (TrackInfo.timeLimitMs) has passed since GO. */
 export const RACE_LAPS = 3;
-/** ...or when this much time has passed since GO. */
-export const RUN_TIME_LIMIT_MS = 90_000;
 /** How often the server fans out car positions to everyone in a session. */
 export const SNAPSHOT_HZ = 10;
 /** Upper bound on position messages accepted per client per second. */
@@ -110,7 +109,6 @@ export interface ServerConfig {
   /** The server's LAN address, used for the QR code when the host opened the site on localhost. */
   lanIp: string | null;
   raceLaps: number;
-  runTimeLimitMs: number;
   /** False until the Godot web export has been built into the server's game directory. */
   gameAvailable: boolean;
 }
@@ -257,8 +255,8 @@ export function splitAt(run: RunResult, gate: number, gatesPerLap: number): numb
   if (run.splitsMs) return run.splitsMs[gate] ?? null;
   const reached = run.finished ? RACE_LAPS * gatesPerLap : run.lapsCompleted * gatesPerLap + run.checkpointsInLap;
   if (gate >= reached) return null;
-  const total = run.finished ? run.totalMs : RUN_TIME_LIMIT_MS;
-  return Math.round((total * (gate + 1)) / reached);
+  // A run that ran out of time has its track's time limit as its total.
+  return Math.round((run.totalMs * (gate + 1)) / reached);
 }
 
 /**
