@@ -27,6 +27,7 @@ import {
 } from '@bitrise-grand-prix/shared';
 import { api, ApiError, getAdminToken, setAdminToken } from '../api';
 import Page from '../components/Page';
+import TrackPreview from '../components/TrackPreview';
 
 const CONTENT_WIDTH = 'layout/maxWidth/1280';
 
@@ -152,11 +153,7 @@ const SessionsPage = () => {
 
   return (
     <Page>
-      <BitkitPageHeader
-        contentWidth={CONTENT_WIDTH}
-        secondaryText="Phone-controlled RC car racing. Create a session, show its QR code, let people race."
-        title="Bitrise Grand Prix"
-      >
+      <BitkitPageHeader contentWidth={CONTENT_WIDTH} title="Bitrise Grand Prix">
         {unlocked && (
           <BitkitButton icon={IconPlus} onClick={openCreateDialog}>
             New session
@@ -298,6 +295,7 @@ const SessionsPage = () => {
               </option>
             ))}
           </BitkitNativeSelect>
+          <TrackPreview trackId={newTrack} />
         </VStack>
       </BitkitFormDialog>
     </Page>

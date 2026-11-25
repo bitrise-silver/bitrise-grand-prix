@@ -494,17 +494,16 @@ func _on_race_state(state: int) -> void:
 			hud.sticks_enabled = false
 
 
-func _on_lap(lap: int, lap_ms: int) -> void:
+func _on_lap(lap: int, _lap_ms: int) -> void:
 	_send_position()
 	if autopilot and not OS.has_feature("web"):
 		var rate := float(Engine.physics_ticks_per_second)
 		print("lap %d: %.2f s simulated" % [lap, (_sim_ticks - _sim_lap_start) / rate])
 		_sim_lap_start = _sim_ticks
+	# No pop-up: the corner readout already counts laps, and a chime marks the new one.
 	if lap == _laps_total - 1:
-		hud.show_toast("FINAL LAP   %s" % Hud.format_time(lap_ms), COL_GOLD, 1.4)
 		audio.play("final_lap")
 	elif lap < _laps_total:
-		hud.show_toast("LAP %d   %s" % [lap, Hud.format_time(lap_ms)], Color("#c289e6"), 1.2)
 		audio.play("lap")
 
 
@@ -526,13 +525,12 @@ func _on_finished(completed: bool, total_ms: int) -> void:
 	_autopilot_restart = 5.0
 
 
+## No pop-up: the screen edges glow in the box's colour, and the sound says which it was.
 func _on_effect(kind: String) -> void:
 	if kind == "boost":
-		hud.show_toast("CACHE HIT  +50%", COL_BOOST)
 		hud.pulse_edges(COL_BOOST, 0.5)
 		audio.play("boost")
 	else:
-		hud.show_toast("BUG  -50%", COL_BUG)
 		hud.pulse_edges(COL_BUG, 0.6)
 		audio.play("bug")
 		_shake = maxf(_shake, 0.55)
@@ -567,7 +565,7 @@ func _show_start_panel() -> void:
 	if not net:
 		hud.show_panel("Practice run", laps, "START", "Not connected to a session, so nothing is recorded.")
 	elif not _session_open:
-		hud.show_results("Session closed", "", "", "", _board_rows(), _own_board_row(), _session_name)
+		hud.show_results("Session closed", "", "", _board_rows(), _own_board_row(), _session_name)
 	else:
 		hud.show_panel(str(identity.get("name", "Ready?")), "%s\n%s" % [_session_name, laps], "START")
 
@@ -592,10 +590,9 @@ func _show_result_panel() -> void:
 			subtitle = "That one did not count. Try again!"
 		else:
 			subtitle = "This run was not recorded (%s)." % str(server.get("reason", "unknown"))
-	var note := "Best lap %s" % Hud.format_time(race.best_lap_ms()) if race.best_lap_ms() > 0 else ""
 	var can_retry := not net or _session_open
 	var count_to: int = int(_last_run.get("total_ms", 0)) if completed else -1
-	hud.show_results(title, subtitle, "RACE AGAIN" if can_retry else "", note, _board_rows(), _own_board_row(), _session_name, count_to)
+	hud.show_results(title, subtitle, "RACE AGAIN" if can_retry else "", _board_rows(), _own_board_row(), _session_name, count_to)
 
 
 func _board_rows() -> Array:
@@ -610,12 +607,10 @@ func _board_rows() -> Array:
 	return rows
 
 
-## [position, name, best lap, total, colour]
+## [position, name, total time, colour]
 func _board_row(entry: Dictionary) -> Array:
 	var time := Hud.format_time(int(entry.get("totalMs", 0))) if entry.get("finished", false) else "%d/%d laps" % [int(entry.get("lapsCompleted", 0)), _laps_total]
-	var best: Variant = entry.get("bestLapMs", null)
-	var best_text := Hud.format_time(int(best)) if best != null else "–"
-	return [str(int(entry.get("rank", 0))), str(entry.get("name", "")), best_text, time, str(entry.get("color", "#9247c2"))]
+	return [str(int(entry.get("rank", 0))), str(entry.get("name", "")), time, str(entry.get("color", "#9247c2"))]
 
 
 func _own_board_row() -> int:
@@ -666,7 +661,7 @@ func _process(delta: float) -> void:
 	scenery.update_focus(focus, delta)
 
 	var time_left: int = _time_limit_ms - race.elapsed_ms() if race.state == Race.State.RACING else -1
-	hud.set_race_readout(race.lap, _laps_total, race.elapsed_ms(), time_left, race.best_lap_ms())
+	hud.set_race_readout(race.lap, _laps_total, race.elapsed_ms(), time_left)
 	if time_left >= 0 and time_left <= TICK_FROM_MS:
 		var second := int(ceil(time_left / 1000.0))
 		if second != _last_tick_second:

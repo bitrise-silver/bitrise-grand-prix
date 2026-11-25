@@ -55,10 +55,6 @@ func elapsed_ms() -> int:
 	return 0
 
 
-func best_lap_ms() -> int:
-	return int(lap_times_ms.min()) if not lap_times_ms.is_empty() else 0
-
-
 func _process(delta: float) -> void:
 	if state == State.COUNTDOWN:
 		_countdown_left -= delta

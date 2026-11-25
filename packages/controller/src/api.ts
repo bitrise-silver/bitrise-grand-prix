@@ -170,6 +170,15 @@ function siteUrl(config: ServerConfig): string {
 export const joinUrl = (config: ServerConfig, code: string, token: string) =>
   `${siteUrl(config)}/join/${code}?t=${encodeURIComponent(token)}`;
 
+/**
+ * A one-time join link from the QR screen, for someone who cannot scan the code. It carries a
+ * ticket rather than a join code, so it works for a few minutes instead of a few seconds, and
+ * only once. The ticket sits in the #fragment, which browsers never send to a server or pass on
+ * as a referrer; `until` says when it runs out, on the server's clock.
+ */
+export const shareJoinUrl = (config: ServerConfig, code: string, ticket: JoinTicketResponse) =>
+  `${siteUrl(config)}/join/${code}#ticket=${encodeURIComponent(ticket.ticket)}&until=${ticket.expiresAt}`;
+
 /** The host's QR screen for a session, meant for its own display at the booth. */
 export const qrScreenUrl = (code: string) => `/session/${encodeURIComponent(code)}/qr`;
 

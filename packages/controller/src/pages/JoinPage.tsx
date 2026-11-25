@@ -3,18 +3,22 @@ import {
   BitkitButton,
   BitkitContentWrapper,
   BitkitEmptyState,
-  BitkitList,
   BitkitPageHeader,
-  BitkitSectionHeading,
   BitkitTextInput,
   IconFlag,
-  IconMobileLandscape,
 } from '@bitrise/bitkit-v2';
 import { VStack } from '@chakra-ui/react/stack';
 import { Text } from '@chakra-ui/react/text';
 import { useEffect, useRef, useState, type SyntheticEvent } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router';
-import { findTrack, MAX_NAME_LENGTH, RACE_LAPS, RUN_TIME_LIMIT_MS, type JoinTicketResponse } from '@bitrise-grand-prix/shared';
+import {
+  findTrack,
+  JOIN_TICKET_TTL_MS,
+  MAX_NAME_LENGTH,
+  RACE_LAPS,
+  RUN_TIME_LIMIT_MS,
+  type JoinTicketResponse,
+} from '@bitrise-grand-prix/shared';
 import {
   api,
   ApiError,
@@ -25,6 +29,7 @@ import {
   storeTicket,
   type StoredPlayer,
 } from '../api';
+import BitbotPicture from '../components/BitbotPicture';
 import Leaderboard from '../components/Leaderboard';
 import Page from '../components/Page';
 import { useSession } from '../useSession';
@@ -33,6 +38,25 @@ const CONTENT_WIDTH = 'layout/maxWidth/480';
 
 /** Where a phone stands with joining: no code yet, checking the scanned one, or allowed in. */
 type Pass = { state: 'none' } | { state: 'expired' } | { state: 'checking' } | { state: 'ready'; ticket: JoinTicketResponse };
+
+const LINK_TICKET = /(?:^#|&)ticket=([^&]+)/;
+/** What the server sends a scan to when the code had already run out by the time it arrived. */
+const LINK_EXPIRED = '#expired';
+
+/**
+ * A ticket in the #fragment: the server puts one there when it trades a scanned code on the
+ * phone's first request, and a join link shared from the QR screen carries one too. Keep it
+ * like any other ticket. The fragment comes off the address once the page is up.
+ */
+function ticketFromLink(code: string): JoinTicketResponse | null {
+  const ticket = LINK_TICKET.exec(window.location.hash)?.[1];
+  if (!ticket) return null;
+  // `until` is on the server's clock, which can differ from this phone's; the server decides anyway.
+  const until = Number(/(?:^#|&)until=(\d+)/.exec(window.location.hash)?.[1]);
+  const found = { ticket: decodeURIComponent(ticket), expiresAt: until > Date.now() ? until : Date.now() + JOIN_TICKET_TTL_MS };
+  storeTicket(code, found);
+  return found;
+}
 
 /**
  * Where the QR code leads. The code in the link works for a few seconds only, so it is traded
@@ -48,6 +72,9 @@ const JoinPage = () => {
   const [stored, setStored] = useState<StoredPlayer | null>(() => getStoredPlayer(code));
   const [pass, setPass] = useState<Pass>(() => {
     if (searchParams.get('t')) return { state: 'checking' };
+    const linked = ticketFromLink(code);
+    if (linked) return { state: 'ready', ticket: linked };
+    if (window.location.hash === LINK_EXPIRED) return { state: 'expired' };
     const ticket = getStoredTicket(code);
     return ticket ? { state: 'ready', ticket } : { state: 'none' };
   });
@@ -59,7 +86,16 @@ const JoinPage = () => {
     document.title = session ? `Join ${session.name} · Bitrise Grand Prix` : 'Bitrise Grand Prix';
   }, [session]);
 
-  // Trade the scanned code for a ticket once, then drop it from the address bar.
+  // A ticket from the link is stored by now; keep it out of the address bar and the history.
+  useEffect(() => {
+    if (LINK_TICKET.test(window.location.hash) || window.location.hash === LINK_EXPIRED) {
+      window.history.replaceState(null, '', window.location.pathname + window.location.search);
+    }
+  }, []);
+
+  // The server normally trades a scanned code before this page loads (see above). When it has
+  // not, as in development where another server hands out the page, trade it here, once, then
+  // drop it from the address bar.
   useEffect(() => {
     const token = searchParams.get('t');
     if (!token || exchanged.current) return;
@@ -125,6 +161,11 @@ const JoinPage = () => {
   const isOpen = session.status === 'open';
   const hasResults = session.leaderboard.length > 0;
   const track = findTrack(session.trackId);
+  // About to race (picking a name, or back for another go): the leaderboard is what they are
+  // racing for, so it shows even before anyone has finished.
+  const canRace = isOpen && (stored !== null || pass.state === 'ready');
+  // Nothing to do here but go back to the QR code.
+  const mustScan = isOpen && stored === null && (pass.state === 'none' || pass.state === 'expired');
 
   return (
     <Page>
@@ -172,18 +213,19 @@ const JoinPage = () => {
 
         {isOpen && !stored && pass.state === 'expired' && (
           <BitkitAlert
-            messageText="The code on the screen changes every few seconds. Scan it again."
-            titleText="That QR code has expired"
+            messageText="The QR code on the screen changes every few seconds, and a shared join link works once. Scan the code on the screen again."
+            titleText="That code has expired"
             variant="warning"
           />
         )}
+
+        {mustScan && <BitbotPicture puzzled={pass.state === 'expired'} />}
 
         {isOpen && !stored && pass.state === 'ready' && (
           <VStack alignItems="stretch" as="form" gap="24" onSubmit={handleJoin}>
             <BitkitTextInput
               counter
               errorText={joinError}
-              helperText="Shown on the big screen and the leaderboard."
               inputProps={{ autoCapitalize: 'words', autoComplete: 'nickname', enterKeyHint: 'go' }}
               label="Driver name"
               maxLength={MAX_NAME_LENGTH}
@@ -197,29 +239,9 @@ const JoinPage = () => {
           </VStack>
         )}
 
-        {/* What the race is like, while they pick a name or wait to scan. */}
-        {isOpen && (
-          <VStack alignItems="stretch" as="section" gap="16">
-            <BitkitSectionHeading icon={IconMobileLandscape} label="How to race" />
-            <BitkitList colorVariant="purple" variant="explainer">
-              <BitkitList.Item helperText="Left thumb steers, right thumb accelerates. The small button brakes, then reverses.">
-                Hold your phone sideways
-              </BitkitList.Item>
-              <BitkitList.Item helperText="Each one gives you half as much speed again for a second.">
-                Drive through the Build Cache boxes
-              </BitkitList.Item>
-              <BitkitList.Item helperText="A bug halves your speed for a second. So does the grass.">Dodge the bugs</BitkitList.Item>
-              <BitkitList.Item
-                helperText={`${RACE_LAPS} laps in ${RUN_TIME_LIMIT_MS / 1000} seconds. Your best run counts, so go again as often as you like.`}
-              >
-                Beat the clock
-              </BitkitList.Item>
-            </BitkitList>
-          </VStack>
+        {(canRace || hasResults) && (
+          <Leaderboard entries={session.leaderboard} limit={5} secondaryText="Top 5, best run per driver" />
         )}
-
-        {/* Nothing to show until someone has finished a run; the join form should be the whole page. */}
-        {hasResults && <Leaderboard entries={session.leaderboard} limit={5} secondaryText="Top 5, best run per driver" />}
       </BitkitContentWrapper>
     </Page>
   );

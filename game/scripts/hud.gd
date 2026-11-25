@@ -67,7 +67,6 @@ var _right: VBoxContainer
 var _lap_number: Label
 var _lap_total: Label
 var _time_value: Label
-var _best_value: Label
 var _warning_label: Label
 var _status_label: Label
 var _banner: Label
@@ -91,7 +90,6 @@ var _results: PanelContainer
 var _results_session: Label
 var _results_time: Label
 var _results_subtitle: Label
-var _results_note: Label
 var _results_rows: VBoxContainer
 var _results_button: Button
 var _portrait: Control
@@ -499,7 +497,6 @@ func _build_right() -> void:
 	stack.add_child(_lap_total)
 
 	_time_value = _time_row("TIME")
-	_best_value = _time_row("BEST")
 	_warning_label = _label(28, COL_WARN)
 	_warning_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	_right.add_child(_warning_label)
@@ -717,11 +714,8 @@ func _build_results() -> void:
 	_results_subtitle.add_theme_constant_override("outline_size", 0)
 	_results_subtitle.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	detail.add_child(_results_subtitle)
-	_results_note = _label(22, COL_DIM)
-	_results_note.add_theme_constant_override("outline_size", 0)
-	detail.add_child(_results_note)
 
-	var columns := _table_row(["POS", "", "DRIVER", "BEST LAP", "TIME"], Color(0, 0, 0, 0), COL_DIM, 20)
+	var columns := _table_row(["POS", "", "DRIVER", "TIME"], Color(0, 0, 0, 0), COL_DIM, 20)
 	column.add_child(columns)
 	_results_rows = VBoxContainer.new()
 	_results_rows.add_theme_constant_override("separation", 4)
@@ -731,14 +725,14 @@ func _build_results() -> void:
 	_results.visible = false
 
 
-## One row of the results table: position, colour bar, name, best lap, total.
+## One row of the results table: position, colour bar, name, total time.
 func _table_row(cells: Array, background: Color, text_color: Color, text_size := 26, bar := Color(0, 0, 0, 0)) -> PanelContainer:
 	var row := PanelContainer.new()
 	row.add_theme_stylebox_override("panel", _panel_style(background, 8, Vector4(12, 2, 14, 3)))
 	var line := HBoxContainer.new()
 	line.add_theme_constant_override("separation", 12)
 	row.add_child(line)
-	var widths := [52, 6, 0, 150, 150]
+	var widths := [52, 6, 0, 150]
 	for i in cells.size():
 		if i == 1:
 			var swatch := ColorRect.new()
@@ -792,12 +786,11 @@ func _build_portrait() -> void:
 
 # --- what the game tells the HUD ----------------------------------------------------------------
 
-## `time_left_ms` is negative when no run is in progress; `best_lap_ms` is 0 before the first lap.
-func set_race_readout(lap: int, laps_total: int, elapsed_ms: int, time_left_ms: int, best_lap_ms := 0) -> void:
+## `time_left_ms` is negative when no run is in progress.
+func set_race_readout(lap: int, laps_total: int, elapsed_ms: int, time_left_ms: int) -> void:
 	_lap_number.text = str(mini(lap, laps_total))
 	_lap_total.text = "/%d" % laps_total
 	_time_value.text = format_time(elapsed_ms)
-	_best_value.text = format_time(best_lap_ms) if best_lap_ms > 0 else "–:––.––"
 	var warn := time_left_ms >= 0 and time_left_ms <= TIME_WARNING_MS
 	_warning_label.visible = warn
 	if warn:
@@ -1016,10 +1009,10 @@ func show_panel(title: String, subtitle: String, button_text: String, note := ""
 	_open(_panel)
 
 
-## The results table. Each row is [position, name, best lap, total, colour]; `highlight` is
-## the player's own row. When the table first opens with `count_to_ms` given, the big time
-## counts up to it.
-func show_results(title: String, subtitle: String, button_text: String, note: String, rows: Array, highlight: int,
+## The results table. Each row is [position, name, total time, colour]; `highlight` is the
+## player's own row. When the table first opens with `count_to_ms` given, the big time counts
+## up to it.
+func show_results(title: String, subtitle: String, button_text: String, rows: Array, highlight: int,
 		session_name: String, count_to_ms := -1) -> void:
 	_close(_panel)
 	var opening := not _results.visible or _results.modulate.a < 0.5
@@ -1035,15 +1028,13 @@ func show_results(title: String, subtitle: String, button_text: String, note: St
 		_count_tween.tween_callback(func() -> void: _results_time.text = title)
 	_results_subtitle.text = subtitle
 	_results_subtitle.visible = not subtitle.is_empty()
-	_results_note.text = note
-	_results_note.visible = not note.is_empty()
 	for child in _results_rows.get_children():
 		child.queue_free()
 	for i in rows.size():
 		var cells: Array = rows[i]
 		var own := i == highlight
-		var bar := Color(str(cells[4])) if cells.size() > 4 else COL_ACCENT
-		var row := _table_row([cells[0], "", cells[1], cells[2], cells[3]], COL_ACCENT if own else COL_ROW, COL_ON_ACCENT if own else COL_TEXT, 26, bar)
+		var bar := Color(str(cells[3])) if cells.size() > 3 else COL_ACCENT
+		var row := _table_row([cells[0], "", cells[1], cells[2]], COL_ACCENT if own else COL_ROW, COL_ON_ACCENT if own else COL_TEXT, 26, bar)
 		_results_rows.add_child(row)
 		if opening:
 			# Rows come in one after another, top first.

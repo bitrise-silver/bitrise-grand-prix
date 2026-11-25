@@ -72,7 +72,8 @@ On screen while racing:
 - **Position**, top left: where your run stands against everyone else's best run, measured
   at the last checkpoint you passed (so it changes during the lap), with the top of the
   standings and the gap to the driver ahead.
-- **Lap, time and best lap**, top right. The remaining time appears in the last 15 seconds.
+- **Lap and time**, top right. The remaining time appears in the last 15 seconds. Only a
+  run's total time counts and is shown: there are no lap times, on the phone or on the site.
 - An LED countdown, a short fly-over of the track before your first run, and the results
   over the live track at the end.
 
@@ -83,7 +84,7 @@ You need Node 22 or newer, and Godot 4.7 with its web export templates to build 
 ```bash
 npm install
 npm run build:game     # exports the Godot project to game/export/web
-npm run build          # builds the controller site and the server
+npm run build          # builds the controller site (with gzipped scripts) and the server
 npm run dev:server     # http://localhost:8787
 ```
 
@@ -101,6 +102,8 @@ To develop the controller site with hot reload, run `npm run dev:controller` as 
 3. Put the QR code on a phone (or tablet) next to it, propped up where players can scan it.
    See [A phone for the QR code](#a-phone-for-the-qr-code).
 4. Players scan the code, enter a driver name and race. They can go again as often as they like.
+   Someone whose camera will not read the code can be sent a join link instead: **Share join
+   link** on the QR screen makes one that works once, for three minutes.
 5. **Close session** when you are done. Results are kept and the session can be reopened.
 
 ### A phone for the QR code
@@ -246,8 +249,15 @@ for what the code licence does and does not cover.
   session page anyone can see shows the race and the standings, never the code. The key in a
   phone link travels in the part of the address after `#`, which browsers never send to the
   server or pass on to other sites.
-- A phone trades the code for a one-time ticket the moment it opens the link, then has three
-  minutes to type a name. Joining without a valid ticket is refused.
+- The server trades the code for a one-time ticket on the phone's very first request, before
+  the site has even downloaded, and hands the ticket to the page after `#`. So only the scan
+  and that first request race the code's 10 seconds; a slow phone or busy Wi-Fi can take as
+  long as it likes over the rest. The player then has three minutes to type a name. Joining
+  without a valid ticket is refused. A code that arrives too late gets "That code has expired",
+  and scanning again works.
+- The QR screen can also trade its current code for a ticket itself and share it as a join
+  link, for someone who cannot scan. The ticket travels after `#` like the screen key, works
+  once, and runs out after three minutes.
 
 **Results.** Physics runs on the phone, so a phone's word about its lap times counts for
 nothing. Phones only report where their car is, about ten times a second; the server's

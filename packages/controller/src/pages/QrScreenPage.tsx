@@ -2,12 +2,16 @@ import {
   BitkitAlert,
   BitkitBreadcrumb,
   BitkitButton,
+  BitkitCodeSnippet,
   BitkitContentWrapper,
+  BitkitDialog,
   BitkitEmptyState,
   BitkitPageHeader,
   BitkitProgressBar,
   BitkitTextInput,
+  createBitkitToast,
   IconFlag,
+  IconLink,
 } from '@bitrise/bitkit-v2';
 import { Card } from '@chakra-ui/react/card';
 import { QrCode } from '@chakra-ui/react/qr-code';
@@ -15,8 +19,8 @@ import { VStack } from '@chakra-ui/react/stack';
 import { Text } from '@chakra-ui/react/text';
 import { useEffect, useState, type SyntheticEvent } from 'react';
 import { useParams } from 'react-router';
-import { JOIN_CODE_ROTATE_MS, RACE_LAPS, RUN_TIME_LIMIT_MS, type ServerConfig } from '@bitrise-grand-prix/shared';
-import { api, ApiError, getScreenKey, joinUrl, setScreenKey } from '../api';
+import { JOIN_CODE_ROTATE_MS, JOIN_TICKET_TTL_MS, type ServerConfig } from '@bitrise-grand-prix/shared';
+import { api, ApiError, getScreenKey, joinUrl, setScreenKey, shareJoinUrl } from '../api';
 import Page from '../components/Page';
 import { useSession } from '../useSession';
 
@@ -55,6 +59,9 @@ const QrScreenPage = () => {
   const [tokenInput, setTokenInput] = useState('');
   const [tokenError, setTokenError] = useState('');
   const [checkingToken, setCheckingToken] = useState(false);
+  /** A one-time join link made for someone who cannot scan, while its dialog is open. */
+  const [shareLink, setShareLink] = useState<string | null>(null);
+  const [makingLink, setMakingLink] = useState(false);
 
   // Declared before the fetch below, so a freshly opened phone link is used straight away.
   useEffect(() => takeKeyFromLink(code), [code]);
@@ -178,15 +185,44 @@ const QrScreenPage = () => {
 
   const remaining = current ? Math.max(0, current.rotatesAt - (now + current.offset)) : 0;
   const url = current && config ? joinUrl(config, code, current.token) : '';
+  const linkMinutes = Math.round(JOIN_TICKET_TTL_MS / 60_000);
+  // The share sheet exists on phones and tablets, and only over HTTPS.
+  const canShare = typeof navigator !== 'undefined' && typeof navigator.share === 'function';
+
+  // For someone whose camera will not read the code: trade the code on screen for a ticket
+  // here, so the link lasts minutes rather than seconds, and works for one person.
+  const makeShareLink = async () => {
+    if (!current || !config) return;
+    setMakingLink(true);
+    try {
+      setShareLink(shareJoinUrl(config, code, await api.exchangeJoinCode(code, current.token)));
+    } catch (caught) {
+      createBitkitToast({
+        messageText: caught instanceof Error ? caught.message : 'Try again in a moment.',
+        titleText: 'Could not make a join link',
+        variant: 'critical',
+      });
+    } finally {
+      setMakingLink(false);
+    }
+  };
 
   return (
     <Page>
-      <BitkitPageHeader
-        breadcrumb={breadcrumb}
-        contentWidth={CONTENT_WIDTH}
-        secondaryText={session && isOpen ? 'Scan to race' : undefined}
-        title={session?.name ?? `Session ${code}`}
-      />
+      <BitkitPageHeader breadcrumb={breadcrumb} contentWidth={CONTENT_WIDTH} title={session?.name ?? `Session ${code}`}>
+        {isOpen && !problem && (
+          <BitkitButton
+            disabledReason="Waiting for the first join code"
+            icon={IconLink}
+            onClick={() => void makeShareLink()}
+            size="md"
+            state={!url ? 'disabled' : makingLink ? 'loading' : undefined}
+            variant="secondary"
+          >
+            Share join link
+          </BitkitButton>
+        )}
+      </BitkitPageHeader>
       <BitkitContentWrapper contentWidth={CONTENT_WIDTH}>
         {sessionError && <BitkitAlert messageText={sessionError} titleText="Could not open this session" variant="critical" />}
         {loading && <BitkitEmptyState bodyText="Connecting to the session." headingText="Loading session" icon={IconFlag} loading />}
@@ -245,10 +281,6 @@ const QrScreenPage = () => {
                   value={(remaining / JOIN_CODE_ROTATE_MS) * 100}
                   width="full"
                 />
-                <Text color="text/secondary" textAlign="center" textStyle="body/md/regular">
-                  Point your phone's camera here, pick a driver name and race: {RACE_LAPS} laps, {RUN_TIME_LIMIT_MS / 1000}{' '}
-                  seconds.
-                </Text>
               </VStack>
             </Card.Body>
           </Card.Root>
@@ -262,6 +294,38 @@ const QrScreenPage = () => {
           />
         )}
       </BitkitContentWrapper>
+
+      <BitkitDialog
+        footerButtons={
+          <>
+            {canShare && (
+              <BitkitButton
+                onClick={() => {
+                  if (shareLink) void navigator.share({ title: `Join ${session?.name ?? 'the race'}`, url: shareLink }).catch(() => undefined);
+                }}
+                variant="secondary"
+              >
+                Share…
+              </BitkitButton>
+            )}
+            <BitkitButton onClick={() => setShareLink(null)}>Done</BitkitButton>
+          </>
+        }
+        onOpenChange={({ open }) => {
+          if (!open) setShareLink(null);
+        }}
+        open={shareLink !== null}
+        size="md"
+        title="Join link"
+      >
+        <VStack alignItems="stretch" gap="16">
+          <Text textStyle="body/md/regular">
+            For someone who cannot scan the code: one person can join with this link in the next {linkMinutes} minutes. Send it
+            straight to their phone, for example by AirDrop or a message.
+          </Text>
+          {shareLink && <BitkitCodeSnippet variant="single">{shareLink}</BitkitCodeSnippet>}
+        </VStack>
+      </BitkitDialog>
     </Page>
   );
 };

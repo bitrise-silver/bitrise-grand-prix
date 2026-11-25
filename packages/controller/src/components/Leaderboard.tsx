@@ -10,7 +10,7 @@ import {
   useResponsive,
 } from '@bitrise/bitkit-v2';
 import { Box } from '@chakra-ui/react/box';
-import { HStack, VStack } from '@chakra-ui/react/stack';
+import { HStack } from '@chakra-ui/react/stack';
 import { Text } from '@chakra-ui/react/text';
 import { VisuallyHidden } from '@chakra-ui/react/visually-hidden';
 import { useEffect, useRef, useState } from 'react';
@@ -111,16 +111,10 @@ const Leaderboard = ({ entries, limit, onRemovePlayer, secondaryText }: Leaderbo
                 </HStack>
               </BitkitTable.Cell>
               <BitkitTable.Cell data-label="Time" textAlign={isMobile ? 'start' : 'end'}>
-                <VStack alignItems={isMobile ? 'flex-start' : 'flex-end'} gap="0">
-                  <Text textStyle="code/md">
-                    {entry.finished ? formatRaceTime(entry.totalMs) : `${entry.lapsCompleted}/${RACE_LAPS} laps`}
-                  </Text>
-                  {entry.bestLapMs !== null && (
-                    <Text color="text/secondary" textStyle="body/sm/regular">
-                      Best lap {formatRaceTime(entry.bestLapMs)}
-                    </Text>
-                  )}
-                </VStack>
+                {/* The whole run's time is what counts; lap times are not shown anywhere. */}
+                <Text textStyle="code/md">
+                  {entry.finished ? formatRaceTime(entry.totalMs) : `${entry.lapsCompleted}/${RACE_LAPS} laps`}
+                </Text>
               </BitkitTable.Cell>
               {onRemovePlayer &&
                 (isMobile ? (

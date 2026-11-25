@@ -8,16 +8,15 @@ import {
   BitkitDialog,
   BitkitEmptyState,
   BitkitPageHeader,
-  BitkitStat,
   createBitkitToast,
   IconFlag,
   IconOpenInNew,
 } from '@bitrise/bitkit-v2';
-import { HStack, VStack } from '@chakra-ui/react/stack';
+import { VStack } from '@chakra-ui/react/stack';
 import { Text } from '@chakra-ui/react/text';
 import { useEffect, useState } from 'react';
 import { useParams } from 'react-router';
-import { findTrack, formatRaceTime, type LeaderboardEntry, type ServerConfig } from '@bitrise-grand-prix/shared';
+import { findTrack, type LeaderboardEntry, type ServerConfig } from '@bitrise-grand-prix/shared';
 import { api, gameUrl, getAdminToken, phoneLinkUrl, qrScreenUrl } from '../api';
 import Leaderboard from '../components/Leaderboard';
 import LiveRace from '../components/LiveRace';
@@ -117,8 +116,6 @@ const SessionPage = () => {
 
   const isOpen = session.status === 'open';
   const track = findTrack(session.trackId);
-  const bestLaps = session.leaderboard.flatMap((entry) => (entry.bestLapMs === null ? [] : [entry.bestLapMs]));
-  const fastestLap = bestLaps.length > 0 ? formatRaceTime(Math.min(...bestLaps)) : '–';
   const driving = session.activePlayers === 1 ? '1 driver connected' : `${session.activePlayers} drivers connected`;
 
   return (
@@ -132,7 +129,6 @@ const SessionPage = () => {
           </BitkitBreadcrumb>
         }
         contentWidth={CONTENT_WIDTH}
-        secondaryText={`${track?.name ?? session.trackId} · code ${session.code}`}
         title={session.name}
       >
         <BitkitButton
@@ -192,13 +188,6 @@ const SessionPage = () => {
               title={`Live race: ${session.name}`}
             />
           )}
-          {/* Under the race rather than beside it, so the leaderboard can sit right below the QR code. */}
-          <HStack alignItems="flex-start" columnGap="32" flexWrap="wrap" rowGap="16">
-            <BitkitStat label="Connected now" value={String(session.activePlayers)} />
-            <BitkitStat label="Drivers" value={String(session.players.length)} />
-            <BitkitStat label="Runs" value={String(session.runs)} />
-            <BitkitStat label="Fastest lap" value={fastestLap} />
-          </HStack>
         </VStack>
 
         {/* The QR code is on its own screen (see the header), never next to the race view. */}

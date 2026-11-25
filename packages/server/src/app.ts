@@ -37,6 +37,7 @@ const PRECOMPRESSED_TYPES: Record<string, string> = {
   '.wasm': 'application/wasm',
   '.pck': 'application/octet-stream',
   '.js': 'text/javascript; charset=utf-8',
+  '.css': 'text/css; charset=utf-8',
 };
 
 export function firstLanAddress(): string | null {
@@ -59,10 +60,15 @@ function tokensMatch(expected: string, given: string): boolean {
   return a.length === b.length && timingSafeEqual(a, b);
 }
 
-/** A fixed-window limit per client address: at most `max` requests per `windowMs`. */
+/**
+ * A fixed-window limit per client address: at most `max` requests per `windowMs`. As
+ * middleware it answers 429 when a client goes over; `hit` counts a request without answering,
+ * for a route that has something better to do than refuse.
+ */
 function rateLimit(windowMs: number, max: number, message: string, now: () => number) {
   const hits = new Map<string, { count: number; resetAt: number }>();
-  return (req: Request, res: Response, next: NextFunction) => {
+  /** Counts a request from this client: 0 if it is allowed, else the seconds until it is. */
+  const hit = (req: Request): number => {
     const at = now();
     if (hits.size > 10_000) {
       for (const [key, entry] of hits) if (entry.resetAt <= at) hits.delete(key);
@@ -74,13 +80,49 @@ function rateLimit(windowMs: number, max: number, message: string, now: () => nu
       hits.set(key, entry);
     }
     entry.count += 1;
-    if (entry.count > max) {
-      res.set('Retry-After', String(Math.ceil((entry.resetAt - at) / 1000)));
+    return entry.count > max ? Math.ceil((entry.resetAt - at) / 1000) : 0;
+  };
+  const middleware = (req: Request, res: Response, next: NextFunction) => {
+    const wait = hit(req);
+    if (wait > 0) {
+      res.set('Retry-After', String(wait));
       res.status(429).json({ error: message });
       return;
     }
     next();
   };
+  return Object.assign(middleware, { hit });
+}
+
+/**
+ * Serves `file.gz` for `file` from `root` when the browser accepts gzip and the build left one
+ * beside it, so big files are compressed once rather than on every request.
+ */
+function precompressed(root: string, cacheControl: string) {
+  return (req: Request, res: Response, next: NextFunction) => {
+    const type = PRECOMPRESSED_TYPES[extname(req.path)];
+    if (!type || !/\bgzip\b/.test(req.get('accept-encoding') ?? '')) return next();
+    let file: string;
+    try {
+      file = normalize(join(root, decodeURIComponent(req.path)));
+    } catch {
+      return next();
+    }
+    const zipped = `${file}.gz`;
+    if (!file.startsWith(root + sep) || !existsSync(zipped) || !statSync(zipped).isFile()) return next();
+    res.set({
+      'Content-Encoding': 'gzip',
+      'Content-Type': type,
+      'Cache-Control': cacheControl,
+      Vary: 'Accept-Encoding',
+    });
+    res.sendFile(zipped);
+  };
+}
+
+/** For the plain copy of a file that also exists gzipped, so caches keep the two apart. */
+function varyOnEncoding(res: Response, path: string): void {
+  if (PRECOMPRESSED_TYPES[extname(path)]) res.set('Vary', 'Accept-Encoding');
 }
 
 // The controller site loads nothing from other origins. The Godot page needs inline script
@@ -270,26 +312,16 @@ export function createApp(options: AppOptions): express.Express {
 
   if (gameDir) {
     // The export script gzips the big files once; serve those instead of compressing per request.
-    app.use('/game', (req, res, next) => {
-      const type = PRECOMPRESSED_TYPES[extname(req.path)];
-      if (!type || !/\bgzip\b/.test(req.get('accept-encoding') ?? '')) return next();
-      let file: string;
-      try {
-        file = normalize(join(gameDir, decodeURIComponent(req.path)));
-      } catch {
-        return next();
-      }
-      const zipped = `${file}.gz`;
-      if (!file.startsWith(gameDir + sep) || !existsSync(zipped) || !statSync(zipped).isFile()) return next();
-      res.set({
-        'Content-Encoding': 'gzip',
-        'Content-Type': type,
-        'Cache-Control': 'no-cache',
-        Vary: 'Accept-Encoding',
-      });
-      res.sendFile(zipped);
-    });
-    app.use('/game', express.static(gameDir, { setHeaders: (res) => res.set('Cache-Control', 'no-cache') }));
+    app.use('/game', precompressed(gameDir, 'no-cache'));
+    app.use(
+      '/game',
+      express.static(gameDir, {
+        setHeaders: (res, path) => {
+          res.set('Cache-Control', 'no-cache');
+          varyOnEncoding(res, path);
+        },
+      }),
+    );
   }
   app.use('/game', (_req, res) => {
     res
@@ -301,7 +333,28 @@ export function createApp(options: AppOptions): express.Express {
   // --- controller site -------------------------------------------------------------------------
 
   if (controllerDir && existsSync(join(controllerDir, 'index.html'))) {
-    app.use(express.static(controllerDir, { index: false, maxAge: '1h' }));
+    // The site's build gzips its scripts and styles (vite.config.ts); a phone on venue Wi-Fi
+    // downloads about a third as much before the join page can start.
+    app.use(precompressed(controllerDir, 'public, max-age=3600'));
+    app.use(express.static(controllerDir, { index: false, maxAge: '1h', setHeaders: varyOnEncoding }));
+
+    // A scanned QR code opens /join/CODE?t=JOINCODE. Trade the join code for a ticket here, on the
+    // phone's very first request, instead of once the site has downloaded and started: on slow
+    // Wi-Fi that can take longer than a code lives. The page gets the ticket after the #, which
+    // browsers never send on, exactly as in a join link shared from the QR screen. A code that has
+    // run out goes to the page's "expired" message. Anything else (no such session, a closed one,
+    // too many scans) gets the page as usual, which tries the code itself and says what is wrong.
+    app.get('/join/:code', (req, res, next) => {
+      const token = req.query.t;
+      if (req.method !== 'GET' || typeof token !== 'string') return next();
+      const session = store.getSession(param(req, 'code'));
+      if (!session || session.status !== 'open' || ticketLimit.hit(req) > 0) return next();
+      const ticket = joinGate.createTicket(session.code, token);
+      const page = `/join/${encodeURIComponent(session.code)}`;
+      res.set('Cache-Control', 'no-store');
+      res.redirect(303, ticket ? `${page}#ticket=${encodeURIComponent(ticket.ticket)}&until=${ticket.expiresAt}` : `${page}#expired`);
+    });
+
     // Single-page app: every other route gets index.html and the router takes it from there.
     app.use((req, res, next) => {
       if (req.method !== 'GET') return next();
