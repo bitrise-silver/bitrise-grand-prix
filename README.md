@@ -6,31 +6,8 @@
 Phone-controlled RC car racing for conference booths and team events. A host opens a
 session on a big screen, players scan a QR code, and everyone gets the track's time limit
 (90 to 130 seconds) to put in three fast laps on their own phone. The big screen shows every
-car live in 3D. There are six tracks, from the fast Release Train Ring to the tight Hotfix
-Hairpins, each with at least two jumps.
-
-It looks like a toy racing circuit in Bitrise colours: small cars seen from high above with a
-Bitrise livery (the Bitrise badge on the roof, bonnet stripes and a wing with yellow end
-plates), your own always in Bitrise purple and everyone else's in their driver's colour; purple
-asphalt, Armco and tyre stacks, a grandstand full of fans, team tents, feather flags, and
-trackside banners for Bitrise and its products (Build Cache, Insights, Release Management,
-CodePush, RDE, Build Hub). Cars trail dust at speed, drift through the corners leaving
-tyre marks and smoke, kick up dirt on the grass, steer their front wheels and lean into the
-bends. Start lights on the finish gantry count you down, chase lights run along the gantry
-and the grandstand, marker lights flash round the bends and light studs pulse along the road
-edges. The fans bob, sway, do the odd Mexican wave, jump when a car flies past and take
-flash photos.
-
-Every boost, bug, checkpoint, lap, countdown beep, bump, landing and finish has a sound, as
-do the motor and the tyres; they are all made in code when the game loads, so there are no
-audio files. Players have sound on by default and the big screen has it off; the speaker
-button in the game switches it, and each remembers the choice.
-
-Built with [Godot 4](https://godotengine.org) (the game, exported to the web), Node and
+car live in 3D. Built with [Godot 4](https://godotengine.org) (the game, exported to the web), Node and
 TypeScript (the session server) and React (the session controller site).
-
-> **Status: bootstrap.** The game, the session server and the controller site work end to end
-> in desktop browsers at phone sizes. It has not been tried on real phones yet.
 
 ## How it fits together
 
@@ -56,37 +33,20 @@ TypeScript (the session server) and React (the session controller site).
 
 ## The game
 
-| Thing | What it does | Looks like |
-| --- | --- | --- |
-| Boost | +50 % speed for one second | Box with the Build Cache icon |
-| Obstacle | -50 % speed for one second | Box with the bug icon |
-| Ramp | A jump. On a shortcut it launches you over a wall; too slow and you hit the wall | Chevron deck with the remote access icon |
-| Finish line | Counts a lap once every checkpoint has been passed | Gantry with the Release Management icon |
-| Grass and sand | Slows you to about 40 % | Everything that is not road |
-| Armco | Solid; you bounce off | Barriers along the track wherever there is room |
+| Thing | What it does |
+| --- | --- |
+| Boost | +50 % speed for one second |
+| Obstacle | -50 % speed for one second |
+| Ramp | A jump. On a shortcut it launches you over a wall; too slow and you hit the wall |
+| Finish line | Counts a lap once every checkpoint has been passed |
+| Grass and sand | Slows you to about 40 % |
+| Armco | Solid; you bounce off |
 
-The game is played with the phone held sideways; held upright it asks you to turn it.
-Controls are on screen: the left thumb steers with a stick, and the right thumb has a large
-accelerate button and a smaller reverse button (which brakes first). Steering is relative to
-the car, like a real RC car, and the camera never turns, so left and right feel swapped when
+The game is played with the phone held sideways. Steering is relative to the car, like a real RC car, and the camera never turns, so left and right feel swapped when
 you drive towards the bottom of the screen. On a laptop use the arrow keys or WASD, Enter to
 start, and any key to skip the track intro; on a laptop or desktop the on-screen controls stay
 hidden and the start panel says which keys to press.
 
-On screen while racing:
-
-- **Position**, top left: where your run stands against everyone else's best run, measured
-  at the last checkpoint you passed (so it changes during the lap), with the top of the
-  standings and the gap to the driver ahead.
-- **Lap and time**, top right. The lap number pulses as you cross the line, yellow for the
-  last lap. The remaining time appears in the last 15 seconds. Only a run's total time counts
-  and is shown: there are no lap times, on the phone or on the site.
-- An LED board for the countdown and for how the run ended (FINISH or TIME'S UP), a short
-  fly-over of the track before your first run, and the results over the live track at the end.
-
-The HUD and panels are set in Figtree, Bitrise's brand font (the one Bitkit uses): its
-heaviest weight for names, numbers and buttons, and Bold for sentences and tables. Its digits
-are all set to the same width, so the running time holds still as it counts.
 
 ## Quick start
 
@@ -352,12 +312,6 @@ npm run typecheck
   two-second sounds instead of loops; see the note at the top of that file.
 - Driver names are filtered for length and markup only; there is no profanity filter, so use
   "remove player" for names that should not be on a big screen.
-- The HUD font covers Latin, including accented letters, and falls back to Godot's built-in
-  font for Cyrillic and Greek. Names in other scripts, such as Chinese or Arabic, may show as
-  boxes in the game.
-- Not yet tested on real phones, only in a desktop browser at phone sizes. Shadows, crowds and
-  trees cost frames; phones get fewer trees and smaller shadows automatically, and
-  `?debug=1` shows how a phone is coping.
 
 ## Licence
 
